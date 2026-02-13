@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker exec:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(docker-compose exec:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker cp:*)",
+      "Bash(cd:*)",
+      "Bash(wc:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(du:*)",
+      "Bash(python3:*)",
+      "Bash(for f in \"C:\\\\Users\\\\1\\\\Desktop\\\\my projects\\\\tgbot\\\\booking_bot\\\\handlers\\\\admin.py\" \"C:\\\\Users\\\\1\\\\Desktop\\\\my projects\\\\tgbot\\\\booking_bot\\\\handlers\\\\booking.py\" \"C:\\\\Users\\\\1\\\\Desktop\\\\my projects\\\\tgbot\\\\booking_bot\\\\handlers\\\\user.py\" \"C:\\\\Users\\\\1\\\\Desktop\\\\my projects\\\\tgbot\\\\booking_bot\\\\keyboards\\\\inline.py\" \"C:\\\\Users\\\\1\\\\Desktop\\\\my projects\\\\tgbot\\\\booking_bot\\\\database\\\\crud.py\")",
+      "Bash(do python -c \"with open\\(r''$f''\\) as fh: print\\(len\\(fh.readlines\\(\\)\\), ''$f''\\)\")",
+      "Bash(done)",
+      "Bash(dir:*)",
+      "Bash(python:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker restart:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker compose up:*)",
+      "Bash(del \"C:\\\\Users\\\\1\\\\Desktop\\\\my projects\\\\tgbot\\\\booking_bot\\\\alembic\\\\versions\\\\20260209_2152_45550910d340_add_license_plate_to_equipment.py\")",
+      "Bash(del \"C:\\\\Users\\\\1\\\\Desktop\\\\my projects\\\\tgbot\\\\booking_bot\\\\alembic\\\\versions\\\\20260212_unified_v2_categories_photos_flags.py\")",
+      "Bash(del \"C:\\\\Users\\\\1\\\\Desktop\\\\my projects\\\\tgbot\\\\booking_bot\\\\alembic\\\\versions\\\\20260213_add_quantity_to_equipment.py\")"
+    ]
+  }
+}
