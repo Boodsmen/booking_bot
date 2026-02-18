@@ -20,7 +20,7 @@ from keyboards.inline import (
 )
 from utils.states import BookingStates
 from utils.logger import logger
-from utils.helpers import now_msk
+from utils.helpers import now_msk, now_utc, parse_msk_naive
 
 
 router = Router(name="booking")
@@ -376,8 +376,15 @@ async def callback_select_end_time(callback: CallbackQuery, state: FSMContext, d
     end_date = data.get("end_date", "")
 
     # Validate: end must be after start
-    start_dt = datetime.strptime(f"{start_date} {start_time}", "%Y-%m-%d %H:%M")
-    end_dt = datetime.strptime(f"{end_date} {time_str}", "%Y-%m-%d %H:%M")
+    start_dt = parse_msk_naive(start_date, start_time)
+    end_dt = parse_msk_naive(end_date, time_str)
+
+    # Check start time is still in the future
+    if start_dt < now_utc():
+        await callback.answer("Выбранное время начала уже в прошлом. Создайте новую бронь.", show_alert=True)
+        await state.clear()
+        await callback.message.edit_text("❌ Время бронирования истекло.", reply_markup=get_main_menu_keyboard())
+        return
 
     if end_dt <= start_dt:
         await callback.answer("Время окончания должно быть позже начала!", show_alert=True)
@@ -424,9 +431,17 @@ async def callback_confirm_booking(callback: CallbackQuery, state: FSMContext, d
     end_date = data.get("end_date", "")
     end_time = data.get("end_time", "")
 
-    # Parse datetime
-    start_dt = datetime.strptime(f"{start_date} {start_time}", "%Y-%m-%d %H:%M")
-    end_dt = datetime.strptime(f"{end_date} {end_time}", "%Y-%m-%d %H:%M")
+    # Parse datetime as UTC-aware (user entered times in MSK)
+    start_dt = parse_msk_naive(start_date, start_time)
+    end_dt = parse_msk_naive(end_date, end_time)
+
+    # Validate start time is not in the past
+    now = now_utc()
+    if start_dt < now:
+        await callback.answer("Выбранное время уже в прошлом. Создайте новую бронь.", show_alert=True)
+        await state.clear()
+        await callback.message.edit_text("❌ Время бронирования истекло.", reply_markup=get_main_menu_keyboard())
+        return
 
     # Create booking
     async with async_session_maker() as session:

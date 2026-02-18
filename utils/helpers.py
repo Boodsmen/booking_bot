@@ -7,11 +7,30 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 MSK = ZoneInfo("Europe/Moscow")
+UTC = timezone.utc
+
+
+def now_utc() -> datetime:
+    """Return current datetime in UTC (timezone-aware)."""
+    return datetime.now(UTC)
 
 
 def now_msk() -> datetime:
-    """Return current datetime in Moscow timezone (naive, for display/comparison)."""
+    """Return current datetime in Moscow timezone (naive, for display/comparison).
+    Deprecated: use now_utc() for storage/comparison, to_msk() for display."""
     return datetime.now(MSK).replace(tzinfo=None)
+
+
+def to_msk(dt: datetime) -> datetime:
+    """Convert any aware datetime to Moscow time for display."""
+    return dt.astimezone(MSK)
+
+
+def parse_msk_naive(date_str: str, time_str: str) -> datetime:
+    """Parse user-entered date+time strings (assumed MSK) and return as UTC-aware datetime."""
+    naive = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+    msk_aware = naive.replace(tzinfo=MSK)
+    return msk_aware.astimezone(UTC)
 
 from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession

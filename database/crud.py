@@ -163,7 +163,8 @@ async def get_all_equipment(
     only_available: bool = True,
     category_ids: list[int] | None = None,
 ) -> list[Equipment]:
-    cache_key = f"all_equipment:{only_available}:{category_ids}"
+    sorted_ids = sorted(category_ids) if category_ids is not None else None
+    cache_key = f"all_equipment:{only_available}:{sorted_ids}"
     cached = equipment_cache.get(cache_key)
     if cached is not None:
         return cached
@@ -408,7 +409,28 @@ async def create_booking(
     if start_time > now + max_future:
         return f"Нельзя бронировать более чем на {settings.max_future_booking_days} дней вперед"
 
-    available = await get_equipment_available_count(session, equipment_id, start_time, end_time)
+    # Lock equipment row for the duration of this transaction (prevents TOCTOU race)
+    eq_result = await session.execute(
+        select(Equipment).where(Equipment.id == equipment_id).with_for_update()
+    )
+    equipment = eq_result.scalar_one_or_none()
+    if not equipment:
+        return "Оборудование не найдено"
+
+    # Count overlapping bookings at SQL level inside the same locked transaction
+    overlap_result = await session.execute(
+        select(func.count()).select_from(Booking).where(
+            and_(
+                Booking.equipment_id == equipment_id,
+                Booking.status.in_(["pending", "active", "maintenance"]),
+                Booking.start_time < end_time,
+                Booking.end_time > start_time,
+            )
+        )
+    )
+    overlapping = overlap_result.scalar() or 0
+    available = max(0, equipment.quantity - overlapping)
+
     if available <= 0:
         return "Этот временной слот уже занят"
 
@@ -420,6 +442,7 @@ async def create_booking(
         status="pending",
     )
     session.add(booking)
+    await session.flush()
     await session.commit()
     await session.refresh(booking)
 
@@ -493,6 +516,66 @@ async def get_active_bookings(session: AsyncSession) -> list[Booking]:
             selectinload(Booking.equipment),
         )
         .order_by(Booking.end_time)
+    )
+    return list(result.scalars().all())
+
+
+async def get_bookings_to_expire(session: AsyncSession, now: datetime, timeout: timedelta) -> list[Booking]:
+    """Pending bookings where start_time + timeout < now (SQL-filtered)."""
+    cutoff = now - timeout
+    result = await session.execute(
+        select(Booking)
+        .where(Booking.status == "pending", Booking.start_time < cutoff)
+        .options(selectinload(Booking.equipment), selectinload(Booking.user))
+    )
+    return list(result.scalars().all())
+
+
+async def get_bookings_needing_reminder(session: AsyncSession, now: datetime, window: timedelta) -> list[Booking]:
+    """Pending bookings within reminder window, reminder not yet sent (SQL-filtered)."""
+    result = await session.execute(
+        select(Booking).where(
+            Booking.status == "pending",
+            Booking.confirmation_reminder_sent == False,
+            Booking.start_time >= now - window,
+            Booking.start_time <= now + window,
+        ).options(selectinload(Booking.equipment), selectinload(Booking.user))
+    )
+    return list(result.scalars().all())
+
+
+async def get_active_bookings_ending_soon(session: AsyncSession, now: datetime, window: timedelta) -> list[Booking]:
+    """Active bookings ending within window, end reminder not sent (SQL-filtered)."""
+    result = await session.execute(
+        select(Booking).where(
+            Booking.status == "active",
+            Booking.reminder_sent == False,
+            Booking.end_time > now,
+            Booking.end_time <= now + window,
+        ).options(selectinload(Booking.equipment), selectinload(Booking.user))
+    )
+    return list(result.scalars().all())
+
+
+async def get_overdue_bookings(session: AsyncSession, now: datetime) -> list[Booking]:
+    """Active bookings past end_time (SQL-filtered)."""
+    result = await session.execute(
+        select(Booking).where(
+            Booking.status == "active",
+            Booking.end_time < now,
+        ).options(selectinload(Booking.equipment), selectinload(Booking.user))
+    )
+    return list(result.scalars().all())
+
+
+async def get_stale_active_bookings(session: AsyncSession, now: datetime, threshold: timedelta) -> list[Booking]:
+    """Active bookings ended more than threshold ago (SQL-filtered)."""
+    cutoff = now - threshold
+    result = await session.execute(
+        select(Booking).where(
+            Booking.status == "active",
+            Booking.end_time < cutoff,
+        ).options(selectinload(Booking.equipment), selectinload(Booking.user))
     )
     return list(result.scalars().all())
 
@@ -671,9 +754,9 @@ async def create_maintenance_booking(
     end_time: datetime,
     reason: str,
 ) -> Booking | str:
-    overlap = await check_booking_overlap(session, equipment_id, start_time, end_time)
-    if overlap:
-        return "Этот временной слот уже занят другой бронью"
+    available = await get_equipment_available_count(session, equipment_id, start_time, end_time)
+    if available <= 0:
+        return "Нет доступных единиц оборудования для техобслуживания в это время"
 
     booking = Booking(
         equipment_id=equipment_id,
