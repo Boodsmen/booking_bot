@@ -1,4 +1,4 @@
-"""Inline keyboards: menus, categories, equipment list, calendar, time selection."""
+"""Инлайн-клавиатуры: меню, категории, список оборудования, календарь, выбор времени."""
 
 from datetime import datetime, timedelta
 from calendar import monthcalendar
@@ -10,18 +10,10 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from database.models import Equipment, Booking, Category
 
 
-# ============== MAIN MENU ==============
+# ============== ГЛАВНОЕ МЕНЮ ==============
 
 def get_main_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
-    """
-    Get main menu keyboard.
-
-    Args:
-        is_admin: Whether user is admin (shows admin button)
-
-    Returns:
-        InlineKeyboardMarkup with main menu buttons
-    """
+    """Главное меню пользователя. Кнопка «Админка» показывается только администраторам."""
     builder = InlineKeyboardBuilder()
 
     builder.row(
@@ -49,7 +41,6 @@ def get_main_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
         )
     )
 
-    # Admin button for admins only
     if is_admin:
         builder.row(
             InlineKeyboardButton(
@@ -62,12 +53,7 @@ def get_main_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
 
 
 def get_back_to_menu_keyboard() -> InlineKeyboardMarkup:
-    """
-    Get keyboard with back to menu button.
-
-    Returns:
-        InlineKeyboardMarkup with back button
-    """
+    """Клавиатура с кнопкой «Главное меню»."""
     builder = InlineKeyboardBuilder()
 
     builder.row(
@@ -80,10 +66,10 @@ def get_back_to_menu_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-# ============== CATEGORY SELECTION ==============
+# ============== ВЫБОР КАТЕГОРИИ ==============
 
 def get_equip_list_categories_keyboard(categories: list[Category]) -> InlineKeyboardMarkup:
-    """Get keyboard with equipment categories for equipment list view (not booking)."""
+    """Клавиатура категорий для режима просмотра (не бронирования)."""
     builder = InlineKeyboardBuilder()
 
     for cat in categories:
@@ -102,15 +88,7 @@ def get_equip_list_categories_keyboard(categories: list[Category]) -> InlineKeyb
 
 
 def get_categories_keyboard(categories: list[str]) -> InlineKeyboardMarkup:
-    """
-    Get keyboard with equipment categories.
-
-    Args:
-        categories: List of category names
-
-    Returns:
-        InlineKeyboardMarkup with category buttons
-    """
+    """Клавиатура выбора категории оборудования при бронировании."""
     builder = InlineKeyboardBuilder()
 
     for category in categories:
@@ -131,7 +109,7 @@ def get_categories_keyboard(categories: list[str]) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-# ============== EQUIPMENT LIST WITH PAGINATION ==============
+# ============== СПИСОК ОБОРУДОВАНИЯ С ПАГИНАЦИЕЙ ==============
 
 ITEMS_PER_PAGE = 5
 
@@ -144,16 +122,9 @@ def get_equipment_keyboard(
     back_callback: str | None = None,
 ) -> InlineKeyboardMarkup:
     """
-    Get paginated equipment list keyboard.
+    Постраничный список оборудования.
 
-    Args:
-        equipment_list: List of equipment items
-        page: Current page (0-indexed)
-        category: Category name (for navigation callback)
-        for_booking: If True, clicking selects for booking; if False, just info
-
-    Returns:
-        InlineKeyboardMarkup with equipment and navigation
+    for_booking=True — клик выбирает для бронирования, False — только просмотр информации.
     """
     builder = InlineKeyboardBuilder()
 
@@ -163,15 +134,12 @@ def get_equipment_keyboard(
     if total_pages == 0:
         total_pages = 1
 
-    # Clamp page to valid range
     page = max(0, min(page, total_pages - 1))
 
-    # Slice for current page
     start_idx = page * ITEMS_PER_PAGE
     end_idx = start_idx + ITEMS_PER_PAGE
     page_items = equipment_list[start_idx:end_idx]
 
-    # Equipment buttons
     for item in page_items:
         callback_prefix = "equip" if for_booking else "info"
         builder.row(
@@ -181,27 +149,22 @@ def get_equipment_keyboard(
             )
         )
 
-    # Navigation row
     nav_buttons = []
 
-    # First page button
     if page > 1:
         nav_buttons.append(
             InlineKeyboardButton(text="⏪", callback_data=f"page:{category}:0")
         )
 
-    # Previous page button
     if page > 0:
         nav_buttons.append(
             InlineKeyboardButton(text="◀️", callback_data=f"page:{category}:{page - 1}")
         )
 
-    # Page counter
     nav_buttons.append(
         InlineKeyboardButton(text=f"{page + 1}/{total_pages}", callback_data="noop")
     )
 
-    # Next page button
     if page < total_pages - 1:
         nav_buttons.append(
             InlineKeyboardButton(text="▶️", callback_data=f"page:{category}:{page + 1}")
@@ -210,7 +173,6 @@ def get_equipment_keyboard(
     if nav_buttons:
         builder.row(*nav_buttons)
 
-    # Back button
     if back_callback:
         builder.row(
             InlineKeyboardButton(text="◀️ Назад", callback_data=back_callback)
@@ -227,7 +189,7 @@ def get_equipment_keyboard(
     return builder.as_markup()
 
 
-# ============== CALENDAR ==============
+# ============== КАЛЕНДАРЬ ==============
 
 WEEKDAYS_RU = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 MONTHS_RU = [
@@ -245,17 +207,9 @@ def get_calendar_keyboard(
     back_callback: str | None = None,
 ) -> InlineKeyboardMarkup:
     """
-    Get calendar keyboard for date selection.
+    Календарь для выбора даты.
 
-    Args:
-        year: Year to display
-        month: Month to display (1-12)
-        callback_prefix: Prefix for date callbacks (date_start or date_end)
-        min_date: Minimum selectable date
-        max_date: Maximum selectable date
-
-    Returns:
-        InlineKeyboardMarkup with calendar
+    callback_prefix: префикс для коллбэков дат (date_start или date_end).
     """
     builder = InlineKeyboardBuilder()
 
@@ -264,17 +218,14 @@ def get_calendar_keyboard(
     if max_date is None:
         max_date = now_msk() + timedelta(days=30)
 
-    # Month/Year header with navigation
     header_buttons = []
 
-    # Previous month
     prev_month = month - 1
     prev_year = year
     if prev_month < 1:
         prev_month = 12
         prev_year -= 1
 
-    # Check if previous month is valid
     prev_month_last = datetime(prev_year, prev_month, 28)
     if prev_month_last >= min_date:
         header_buttons.append(
@@ -287,7 +238,6 @@ def get_calendar_keyboard(
         InlineKeyboardButton(text=f"{MONTHS_RU[month]} {year}", callback_data="noop")
     )
 
-    # Next month
     next_month = month + 1
     next_year = year
     if next_month > 12:
@@ -304,14 +254,12 @@ def get_calendar_keyboard(
 
     builder.row(*header_buttons)
 
-    # Weekday headers
     weekday_buttons = [
         InlineKeyboardButton(text=day, callback_data="noop")
         for day in WEEKDAYS_RU
     ]
     builder.row(*weekday_buttons)
 
-    # Calendar days
     cal = monthcalendar(year, month)
     for week in cal:
         week_buttons = []
@@ -322,7 +270,6 @@ def get_calendar_keyboard(
                 date = datetime(year, month, day)
                 date_str = date.strftime("%Y-%m-%d")
 
-                # Check if date is selectable
                 if min_date.date() <= date.date() <= max_date.date():
                     week_buttons.append(
                         InlineKeyboardButton(text=str(day), callback_data=f"{callback_prefix}:{date_str}")
@@ -333,7 +280,6 @@ def get_calendar_keyboard(
                     )
         builder.row(*week_buttons)
 
-    # Navigation
     nav = []
     if back_callback:
         nav.append(InlineKeyboardButton(text="◀️ Назад", callback_data=back_callback))
@@ -343,7 +289,7 @@ def get_calendar_keyboard(
     return builder.as_markup()
 
 
-# ============== TIME SELECTION ==============
+# ============== ВЫБОР ВРЕМЕНИ ==============
 
 def get_time_keyboard(
     callback_prefix: str = "time",
@@ -354,29 +300,18 @@ def get_time_keyboard(
     back_callback: str | None = None,
 ) -> InlineKeyboardMarkup:
     """
-    Get time selection keyboard.
+    Клавиатура выбора времени слотами.
 
-    Args:
-        callback_prefix: Prefix for time callbacks (time_start or time_end)
-        start_hour: First available hour
-        end_hour: Last available hour
-        step_minutes: Time step in minutes
-        min_time: If set, hide slots before this time
-        back_callback: Callback for "Back" button
-
-    Returns:
-        InlineKeyboardMarkup with time slots
+    min_time: если задан — скрываются прошедшие слоты (для сегодняшнего дня).
     """
     builder = InlineKeyboardBuilder()
 
-    # Generate time slots
     times = []
     current_hour = start_hour
     current_minute = 0
 
     while current_hour < end_hour or (current_hour == end_hour and current_minute == 0):
         time_str = f"{current_hour:02d}:{current_minute:02d}"
-        # Filter past times if min_time is set
         if min_time is None or (current_hour, current_minute) > (min_time.hour, min_time.minute):
             times.append(time_str)
 
@@ -385,7 +320,7 @@ def get_time_keyboard(
             current_minute = 0
             current_hour += 1
 
-    # Arrange in rows of 4
+    # Кнопки по 4 в ряд
     row = []
     for i, time_str in enumerate(times):
         row.append(
@@ -401,7 +336,6 @@ def get_time_keyboard(
     if not times:
         builder.row(InlineKeyboardButton(text="⚠️ Нет доступного времени", callback_data="noop"))
 
-    # Navigation
     nav = []
     if back_callback:
         nav.append(InlineKeyboardButton(text="◀️ Назад", callback_data=back_callback))
@@ -411,15 +345,10 @@ def get_time_keyboard(
     return builder.as_markup()
 
 
-# ============== BOOKING CONFIRMATION ==============
+# ============== ПОДТВЕРЖДЕНИЕ БРОНИРОВАНИЯ ==============
 
 def get_booking_confirm_keyboard() -> InlineKeyboardMarkup:
-    """
-    Get confirmation keyboard for new booking.
-
-    Returns:
-        InlineKeyboardMarkup with confirm/cancel buttons
-    """
+    """Клавиатура подтверждения/отмены новой брони."""
     builder = InlineKeyboardBuilder()
 
     builder.row(
@@ -430,24 +359,14 @@ def get_booking_confirm_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-# ============== MY BOOKINGS ==============
+# ============== МОИ БРОНИ ==============
 
 def get_booking_actions_keyboard(
     booking: Booking,
     can_confirm: bool = False,
     can_complete: bool = False,
 ) -> InlineKeyboardMarkup:
-    """
-    Get action buttons for a booking.
-
-    Args:
-        booking: Booking object
-        can_confirm: Whether "Confirm start" button should be shown
-        can_complete: Whether "Return" button should be shown
-
-    Returns:
-        InlineKeyboardMarkup with action buttons
-    """
+    """Кнопки действий для конкретной брони (подтвердить, вернуть, отменить)."""
     builder = InlineKeyboardBuilder()
 
     if booking.status == "pending":
@@ -473,7 +392,7 @@ def get_booking_actions_keyboard(
                     callback_data=f"booking_complete:{booking.id}"
                 )
             )
-        # Can cancel active only before start_time
+        # Отмена активной брони — только до момента начала
         now = datetime.now(booking.start_time.tzinfo)
         if booking.start_time > now:
             builder.row(
@@ -491,16 +410,7 @@ def get_booking_actions_keyboard(
 
 
 def get_my_bookings_keyboard(bookings: list[Booking], page: int = 0) -> InlineKeyboardMarkup:
-    """
-    Get paginated keyboard with user's bookings list.
-
-    Args:
-        bookings: List of user's bookings
-        page: Current page (0-indexed)
-
-    Returns:
-        InlineKeyboardMarkup with booking buttons and navigation
-    """
+    """Постраничный список броней пользователя."""
     builder = InlineKeyboardBuilder()
 
     total_items = len(bookings)
@@ -527,7 +437,6 @@ def get_my_bookings_keyboard(bookings: list[Booking], page: int = 0) -> InlineKe
             )
         )
 
-    # Navigation row
     if total_pages > 1:
         nav_buttons = []
 
@@ -554,15 +463,10 @@ def get_my_bookings_keyboard(bookings: list[Booking], page: int = 0) -> InlineKe
     return builder.as_markup()
 
 
-# ============== PHOTO UPLOAD ==============
+# ============== ЗАГРУЗКА ФОТО ==============
 
 def get_photo_upload_keyboard() -> InlineKeyboardMarkup:
-    """
-    Get keyboard for photo upload state.
-
-    Returns:
-        InlineKeyboardMarkup with Done/Skip buttons
-    """
+    """Клавиатура для состояния загрузки фото (Готово / Пропустить / Отмена)."""
     builder = InlineKeyboardBuilder()
 
     builder.row(
@@ -576,15 +480,10 @@ def get_photo_upload_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-# ============== ADMIN MENU ==============
+# ============== МЕНЮ АДМИНИСТРАТОРА ==============
 
 def get_admin_main_menu_keyboard() -> InlineKeyboardMarkup:
-    """
-    Get admin main menu keyboard.
-
-    Returns:
-        InlineKeyboardMarkup with admin menu buttons
-    """
+    """Главное меню администратора."""
     builder = InlineKeyboardBuilder()
 
     builder.row(
@@ -625,12 +524,7 @@ def get_admin_main_menu_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_admin_equipment_menu_keyboard() -> InlineKeyboardMarkup:
-    """
-    Get admin equipment management menu.
-
-    Returns:
-        InlineKeyboardMarkup with equipment actions
-    """
+    """Меню управления оборудованием."""
     builder = InlineKeyboardBuilder()
 
     builder.row(
@@ -665,12 +559,7 @@ def get_admin_equipment_menu_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_admin_users_menu_keyboard() -> InlineKeyboardMarkup:
-    """
-    Get admin users management menu.
-
-    Returns:
-        InlineKeyboardMarkup with user actions
-    """
+    """Меню управления пользователями."""
     builder = InlineKeyboardBuilder()
 
     builder.row(
@@ -687,12 +576,7 @@ def get_admin_users_menu_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_admin_bookings_menu_keyboard() -> InlineKeyboardMarkup:
-    """
-    Get admin bookings management menu.
-
-    Returns:
-        InlineKeyboardMarkup with booking actions
-    """
+    """Меню управления бронированиями."""
     builder = InlineKeyboardBuilder()
 
     builder.row(
@@ -715,12 +599,7 @@ def get_admin_bookings_menu_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_admin_maintenance_menu_keyboard() -> InlineKeyboardMarkup:
-    """
-    Get admin maintenance management menu.
-
-    Returns:
-        InlineKeyboardMarkup with maintenance actions
-    """
+    """Меню управления техническим обслуживанием."""
     builder = InlineKeyboardBuilder()
 
     builder.row(
@@ -743,16 +622,7 @@ def get_admin_maintenance_menu_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_admin_booking_actions_keyboard(booking_id: int, status: str) -> InlineKeyboardMarkup:
-    """
-    Get keyboard for admin booking actions.
-
-    Args:
-        booking_id: Booking ID
-        status: Current booking status
-
-    Returns:
-        InlineKeyboardMarkup with action buttons
-    """
+    """Кнопки действий администратора над бронью."""
     builder = InlineKeyboardBuilder()
 
     if status in ["pending", "active"]:
@@ -783,12 +653,7 @@ def get_admin_booking_actions_keyboard(booking_id: int, status: str) -> InlineKe
 
 
 def get_admin_reports_menu_keyboard() -> InlineKeyboardMarkup:
-    """
-    Get admin reports menu.
-
-    Returns:
-        InlineKeyboardMarkup with report actions
-    """
+    """Меню отчётов администратора."""
     builder = InlineKeyboardBuilder()
 
     builder.row(
@@ -817,15 +682,7 @@ def get_admin_reports_menu_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_back_to_booking_keyboard(booking_id: int) -> InlineKeyboardMarkup:
-    """
-    Get keyboard with "Back to booking" button after viewing photos.
-
-    Args:
-        booking_id: Booking ID to return to
-
-    Returns:
-        InlineKeyboardMarkup with back button
-    """
+    """Клавиатура «Назад к брони» после просмотра фото."""
     builder = InlineKeyboardBuilder()
 
     builder.row(
@@ -845,15 +702,7 @@ def get_back_to_booking_keyboard(booking_id: int) -> InlineKeyboardMarkup:
 
 
 def get_admin_back_keyboard(back_to: str = "admin:main") -> InlineKeyboardMarkup:
-    """
-    Get keyboard with back button for admin.
-
-    Args:
-        back_to: Callback data for back button (default: admin:main)
-
-    Returns:
-        InlineKeyboardMarkup with back button
-    """
+    """Клавиатура «Назад» для администратора."""
     builder = InlineKeyboardBuilder()
 
     builder.row(
@@ -864,16 +713,7 @@ def get_admin_back_keyboard(back_to: str = "admin:main") -> InlineKeyboardMarkup
 
 
 def get_equipment_action_keyboard(equipment_id: int, is_available: bool) -> InlineKeyboardMarkup:
-    """
-    Get keyboard for equipment actions (enable/disable).
-
-    Args:
-        equipment_id: Equipment ID
-        is_available: Current availability status
-
-    Returns:
-        InlineKeyboardMarkup with action buttons
-    """
+    """Клавиатура действий с оборудованием (включить / выключить из оборота)."""
     builder = InlineKeyboardBuilder()
 
     if is_available:
@@ -898,14 +738,14 @@ def get_equipment_action_keyboard(equipment_id: int, is_available: bool) -> Inli
     return builder.as_markup()
 
 
-# ============== CATEGORY DB KEYBOARDS ==============
+# ============== КЛАВИАТУРЫ КАТЕГОРИЙ ==============
 
 def get_db_categories_keyboard(
     categories: list[Category],
     callback_prefix: str = "category",
     back_callback: str = "menu:main",
 ) -> InlineKeyboardMarkup:
-    """Get keyboard from Category model objects."""
+    """Клавиатура из объектов модели Category."""
     builder = InlineKeyboardBuilder()
 
     for cat in categories:
@@ -927,7 +767,7 @@ def get_user_category_select_keyboard(
     categories: list[Category],
     selected_ids: list[int],
 ) -> InlineKeyboardMarkup:
-    """Multiselect keyboard for choosing user categories."""
+    """Мультиселект для выбора категорий пользователя."""
     builder = InlineKeyboardBuilder()
 
     for cat in categories:
@@ -947,10 +787,10 @@ def get_user_category_select_keyboard(
     return builder.as_markup()
 
 
-# ============== REPORT FILTER KEYBOARDS ==============
+# ============== КЛАВИАТУРЫ ФИЛЬТРОВ ОТЧЁТОВ ==============
 
 def get_report_filter_keyboard() -> InlineKeyboardMarkup:
-    """Get keyboard for report filter selection."""
+    """Клавиатура выбора фильтра для отчёта."""
     builder = InlineKeyboardBuilder()
 
     builder.row(InlineKeyboardButton(text="📁 По категории", callback_data="report_filter:category"))
@@ -963,7 +803,7 @@ def get_report_filter_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_report_period_keyboard() -> InlineKeyboardMarkup:
-    """Get keyboard for report period selection."""
+    """Клавиатура выбора периода отчёта."""
     builder = InlineKeyboardBuilder()
 
     builder.row(InlineKeyboardButton(text="7 дней", callback_data="report_period:7"))

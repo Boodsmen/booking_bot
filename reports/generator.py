@@ -1,4 +1,4 @@
-"""Excel report generator using pandas."""
+"""Генератор Excel-отчётов на основе pandas."""
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -26,23 +26,14 @@ async def generate_report(
     bot=None,
 ) -> Optional[Path]:
     """
-    Generate Excel report for bookings with optional filters.
+    Сгенерировать Excel-отчёт по бронированиям с опциональными фильтрами.
 
-    Args:
-        session: Database session
-        days: Number of days to include (None if custom date range)
-        category_id: Filter by equipment category
-        user_id: Filter by user
-        start_date: Custom range start (used when days is None)
-        end_date: Custom range end (used when days is None)
-
-    Returns:
-        Path to generated Excel file or None if failed
+    days=None означает произвольный диапазон (используются start_date/end_date).
+    Возвращает путь к файлу или None при ошибке.
     """
     try:
         now = datetime.now(timezone.utc)
 
-        # Calculate date range
         if days is not None:
             date_from = now - timedelta(days=days)
             date_to = now
@@ -53,7 +44,6 @@ async def generate_report(
             date_from = now - timedelta(days=30)
             date_to = now
 
-        # Query bookings with relationships
         query = (
             select(Booking)
             .where(Booking.created_at >= date_from)
@@ -65,7 +55,6 @@ async def generate_report(
             .order_by(Booking.created_at.desc())
         )
 
-        # Apply filters
         if category_id is not None:
             query = query.join(Equipment, Booking.equipment_id == Equipment.id).where(
                 Equipment.category_id == category_id
@@ -80,24 +69,20 @@ async def generate_report(
             logger.info("No bookings found for report")
             return None
 
-        # Prepare data for DataFrame
         data = []
         for booking in bookings:
-            # Calculate duration
             if booking.start_time and booking.end_time:
                 duration = booking.end_time - booking.start_time
                 duration_hours = duration.total_seconds() / 3600
             else:
                 duration_hours = 0
 
-            # Format dates
             created_str = booking.created_at.strftime("%Y-%m-%d %H:%M") if booking.created_at else ""
             start_str = booking.start_time.strftime("%Y-%m-%d %H:%M") if booking.start_time else ""
             end_str = booking.end_time.strftime("%Y-%m-%d %H:%M") if booking.end_time else ""
             confirmed_str = booking.confirmed_at.strftime("%Y-%m-%d %H:%M") if booking.confirmed_at else ""
             completed_str = booking.completed_at.strftime("%Y-%m-%d %H:%M") if booking.completed_at else ""
 
-            # Status translation
             status_map = {
                 "pending": "Ожидает",
                 "active": "Активна",
@@ -127,14 +112,11 @@ async def generate_report(
                 "Фото конец": len(booking.photos_end) if booking.photos_end else 0,
             })
 
-        # Create DataFrame
         df = pd.DataFrame(data)
 
-        # Create reports directory if not exists
         reports_dir = Path("reports/files")
         reports_dir.mkdir(parents=True, exist_ok=True)
 
-        # Generate filename with timestamp
         timestamp = now.strftime("%Y%m%d_%H%M%S")
         parts = ["booking_report"]
         if days is not None:
@@ -148,26 +130,21 @@ async def generate_report(
         parts.append(timestamp)
         file_path = reports_dir / f"{'_'.join(parts)}.xlsx"
 
-        # Export to Excel with formatting
         with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
             df.to_excel(writer, index=False, sheet_name='Бронирования')
 
-            # Get workbook and worksheet
             workbook = writer.book
             worksheet = writer.sheets['Бронирования']
 
-            # Auto-adjust column widths
+            # Авто-ширина колонок (макс. 50 символов)
             for idx, col in enumerate(df.columns):
                 max_length = max(
                     df[col].astype(str).apply(len).max(),
                     len(col)
                 ) + 2
-                # Limit max width to 50 characters
                 max_length = min(max_length, 50)
                 worksheet.column_dimensions[chr(65 + idx)].width = max_length
 
-            # Add summary sheet
-            # Build filter description
             filter_lines = []
             if days is not None:
                 filter_lines.append(f"Период: последние {days} дней")
@@ -210,12 +187,10 @@ async def generate_report(
             df_summary = pd.DataFrame(summary_data)
             df_summary.to_excel(writer, index=False, sheet_name='Сводка')
 
-            # Auto-adjust summary sheet
             summary_sheet = writer.sheets['Сводка']
             summary_sheet.column_dimensions['A'].width = 30
             summary_sheet.column_dimensions['B'].width = 15
 
-            # Photos sheet
             bookings_with_photos = [
                 b for b in bookings
                 if (b.photos_start and len(b.photos_start) > 0)
@@ -230,7 +205,6 @@ async def generate_report(
                 photo_sheet.column_dimensions['D'].width = 8
                 photo_sheet.column_dimensions['E'].width = 30
 
-                # Header
                 photo_sheet.append(["ID брони", "Сотрудник", "Оборудование", "Тип", "Файл"])
                 current_row = 2
 
@@ -248,7 +222,7 @@ async def generate_report(
                         photo_sheet.cell(current_row, 4, photo_type)
                         photo_sheet.cell(current_row, 5, photo_path)
 
-                        # Try to embed image if it's a local path
+                        # Встраиваем изображение, если это локальный файл
                         local_file = Path(photo_path)
                         if local_file.exists():
                             try:

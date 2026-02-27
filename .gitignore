@@ -51,6 +51,11 @@ data/photos/
 # Alembic
 alembic/versions/__pycache__/
 
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+
 # OS
 .DS_Store
 Thumbs.db

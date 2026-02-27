@@ -1,4 +1,4 @@
-"""CRUD operations for database."""
+"""CRUD-операции для работы с базой данных."""
 
 from datetime import datetime, timedelta
 
@@ -12,7 +12,7 @@ from utils.cache import equipment_cache
 from utils.logger import logger
 
 
-# ============== USER OPERATIONS ==============
+# ============== ПОЛЬЗОВАТЕЛИ ==============
 
 async def get_user(session: AsyncSession, telegram_id: int) -> User | None:
     result = await session.execute(
@@ -78,7 +78,7 @@ async def update_user(
     return user
 
 
-# ============== CATEGORY OPERATIONS ==============
+# ============== КАТЕГОРИИ ==============
 
 async def get_all_categories_from_db(session: AsyncSession) -> list[Category]:
     """Get all categories from categories table."""
@@ -120,7 +120,7 @@ async def get_or_create_category(session: AsyncSession, name: str) -> Category:
     return category
 
 
-# ============== USER CATEGORY OPERATIONS ==============
+# ============== КАТЕГОРИИ ПОЛЬЗОВАТЕЛЕЙ ==============
 
 async def get_user_categories(session: AsyncSession, user_id: int) -> list[Category]:
     """Get categories assigned to a user."""
@@ -151,12 +151,12 @@ async def get_categories_for_user(session: AsyncSession, user_id: int, is_admin:
 
     user_cats = await get_user_categories(session, user_id)
     if not user_cats:
-        # No categories assigned -> access to all (backward compatibility)
+        # Нет категорий — доступ ко всем (обратная совместимость)
         return await get_all_categories_from_db(session)
     return user_cats
 
 
-# ============== EQUIPMENT OPERATIONS ==============
+# ============== ОБОРУДОВАНИЕ ==============
 
 async def get_all_equipment(
     session: AsyncSession,
@@ -237,14 +237,14 @@ async def get_all_categories(session: AsyncSession) -> list[str]:
     if cached is not None:
         return cached
 
-    # Try from categories table first
+    # Сначала из таблицы categories
     db_cats = await get_all_categories_from_db(session)
     if db_cats:
         categories = [c.name for c in db_cats]
         equipment_cache.set(cache_key, categories)
         return categories
 
-    # Fallback: distinct from equipment table
+    # Фолбэк: уникальные категории из таблицы equipment
     result = await session.execute(
         select(Equipment.category)
         .where(Equipment.is_available == True)
@@ -331,7 +331,7 @@ async def search_equipment(
     return list(result.scalars().all())
 
 
-# ============== BOOKING OPERATIONS ==============
+# ============== БРОНИРОВАНИЯ ==============
 
 async def get_equipment_available_count(
     session: AsyncSession,
@@ -409,7 +409,7 @@ async def create_booking(
     if start_time > now + max_future:
         return f"Нельзя бронировать более чем на {settings.max_future_booking_days} дней вперед"
 
-    # Lock equipment row for the duration of this transaction (prevents TOCTOU race)
+    # Блокируем строку оборудования для предотвращения гонки TOCTOU
     eq_result = await session.execute(
         select(Equipment).where(Equipment.id == equipment_id).with_for_update()
     )
@@ -417,7 +417,7 @@ async def create_booking(
     if not equipment:
         return "Оборудование не найдено"
 
-    # Count overlapping bookings at SQL level inside the same locked transaction
+    # Считаем пересечения на уровне SQL внутри той же транзакции
     overlap_result = await session.execute(
         select(func.count()).select_from(Booking).where(
             and_(
@@ -744,7 +744,7 @@ async def set_overdue_notified(
     return booking
 
 
-# ============== MAINTENANCE OPERATIONS ==============
+# ============== ТЕХОБСЛУЖИВАНИЕ ==============
 
 async def create_maintenance_booking(
     session: AsyncSession,

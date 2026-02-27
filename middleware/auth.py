@@ -1,4 +1,4 @@
-"""Whitelist authorization middleware."""
+"""Middleware авторизации по белому списку."""
 
 from typing import Any, Awaitable, Callable
 
@@ -13,10 +13,10 @@ from utils.logger import logger
 
 class AuthMiddleware(BaseMiddleware):
     """
-    Middleware to check if user is in whitelist (users table).
+    Проверяет наличие пользователя в базе данных (белый список).
 
-    Allows access only to registered users.
-    Unregistered users get "Access denied" message with their ID.
+    Пропускает только зарегистрированных пользователей.
+    Незарегистрированным возвращает сообщение с их Telegram ID.
     """
 
     async def __call__(
@@ -25,7 +25,6 @@ class AuthMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: dict[str, Any],
     ) -> Any:
-        # Get user from event
         user = None
         if isinstance(event, Message):
             user = event.from_user
@@ -37,17 +36,15 @@ class AuthMiddleware(BaseMiddleware):
 
         telegram_id = user.id
 
-        # Check user in database
         try:
             async with async_session_maker() as session:
                 db_user = await get_user(session, telegram_id)
 
                 if db_user:
-                    # User is authorized - add to data for handlers
+                    # Передаём пользователя в data для хендлеров
                     data["db_user"] = db_user
                     return await handler(event, data)
                 else:
-                    # User not in whitelist
                     logger.warning(f"Access denied for user {telegram_id}")
 
                     if isinstance(event, Message):
@@ -66,7 +63,7 @@ class AuthMiddleware(BaseMiddleware):
 
         except Exception as e:
             logger.error(f"Auth middleware error: {e}")
-            # On DB error, allow default admin through with a stub user
+            # При ошибке БД пропускаем начального администратора со stub-объектом
             if settings.default_admin_id and telegram_id == settings.default_admin_id:
                 logger.warning(f"DB unavailable, allowing default admin {telegram_id} through")
                 from database.models import User

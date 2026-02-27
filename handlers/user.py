@@ -1,4 +1,4 @@
-"""User handlers: my bookings, equipment list, confirm, return, cancel."""
+"""Обработчики пользователя: мои брони, список оборудования, подтверждение, возврат, отмена."""
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -28,19 +28,11 @@ from utils.logger import logger
 router = Router(name="user")
 
 
-# ============== MY BOOKINGS ==============
+# ============== МОИ БРОНИ ==============
 
 @router.callback_query(F.data == "menu:my_bookings")
 async def callback_my_bookings(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Show user's bookings list.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
-    # Clear any previous state
+    """Показ списка броней пользователя."""
     await state.clear()
 
     async with async_session_maker() as session:
@@ -67,18 +59,11 @@ async def callback_my_bookings(callback: CallbackQuery, state: FSMContext, db_us
     await callback.answer()
 
 
-# ============== MY BOOKINGS PAGINATION ==============
+# ============== ПАГИНАЦИЯ МОИ БРОНИ ==============
 
 @router.callback_query(F.data.startswith("mybookings_page:"))
 async def callback_my_bookings_page(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Handle "My Bookings" pagination.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Пагинация списка броней."""
     page = int(callback.data.split(":", 1)[1])
 
     async with async_session_maker() as session:
@@ -105,18 +90,11 @@ async def callback_my_bookings_page(callback: CallbackQuery, state: FSMContext, 
     await callback.answer()
 
 
-# ============== BOOKING DETAILS ==============
+# ============== ДЕТАЛИ БРОНИ ==============
 
 @router.callback_query(F.data.startswith("mybooking:"))
 async def callback_booking_details(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Show booking details with action buttons.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Показ деталей брони с кнопками действий."""
     booking_id = int(callback.data.split(":", 1)[1])
 
     async with async_session_maker() as session:
@@ -126,7 +104,6 @@ async def callback_booking_details(callback: CallbackQuery, state: FSMContext, d
         await callback.answer("Бронь не найдена", show_alert=True)
         return
 
-    # Format booking info
     equipment_name = booking.equipment.name if booking.equipment else f"ID:{booking.equipment_id}"
     start_str = booking.start_time.strftime("%d.%m.%Y %H:%M")
     end_str = booking.end_time.strftime("%d.%m.%Y %H:%M")
@@ -140,19 +117,16 @@ async def callback_booking_details(callback: CallbackQuery, state: FSMContext, d
         "maintenance": "🔧 Тех. обслуживание",
     }.get(booking.status, booking.status)
 
-    # Determine available actions
     now = datetime.now(timezone.utc)
 
-    # Can confirm if pending and within 5 minutes of start time or past start
+    # Подтвердить можно, если бронь ещё не началась более чем на 5 минут назад
     can_confirm = (
         booking.status == "pending" and
         booking.start_time <= now + timedelta(minutes=5)
     )
 
-    # Can complete if active
     can_complete = booking.status == "active"
 
-    # Calculate duration
     duration = booking.end_time - booking.start_time
     hours = int(duration.total_seconds() // 3600)
     minutes = int((duration.total_seconds() % 3600) // 60)
@@ -170,7 +144,7 @@ async def callback_booking_details(callback: CallbackQuery, state: FSMContext, d
     if booking.is_overdue:
         text += "\n⚠️ <b>Просрочен возврат!</b>\n"
 
-    # Save booking_id for potential photo upload
+    # Сохраняем booking_id в стейт для возможной загрузки фото
     await state.update_data(current_booking_id=booking_id)
 
     await callback.message.edit_text(
@@ -180,18 +154,11 @@ async def callback_booking_details(callback: CallbackQuery, state: FSMContext, d
     await callback.answer()
 
 
-# ============== CONFIRM BOOKING START ==============
+# ============== ПОДТВЕРЖДЕНИЕ НАЧАЛА ==============
 
 @router.callback_query(F.data.startswith("booking_confirm:"))
 async def callback_confirm_start(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Handle booking start confirmation.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Подтверждение начала использования оборудования."""
     booking_id = int(callback.data.split(":", 1)[1])
 
     async with async_session_maker() as session:
@@ -205,11 +172,9 @@ async def callback_confirm_start(callback: CallbackQuery, state: FSMContext, db_
         await callback.answer("Эту бронь нельзя подтвердить", show_alert=True)
         return
 
-    # Check if photo is required
     requires_photo = booking.equipment.requires_photo if booking.equipment else False
 
     if requires_photo:
-        # Start photo upload flow
         await state.set_state(ConfirmStartStates.uploading_photos)
         await state.update_data(
             confirm_booking_id=booking_id,
@@ -224,7 +189,6 @@ async def callback_confirm_start(callback: CallbackQuery, state: FSMContext, db_
             reply_markup=get_photo_upload_keyboard()
         )
     else:
-        # Confirm without photos
         async with async_session_maker() as session:
             result = await crud.confirm_booking(session, booking_id)
 
@@ -246,18 +210,11 @@ async def callback_confirm_start(callback: CallbackQuery, state: FSMContext, db_
     await callback.answer()
 
 
-# ============== COMPLETE BOOKING (RETURN) ==============
+# ============== ЗАВЕРШЕНИЕ БРОНИ (ВОЗВРАТ) ==============
 
 @router.callback_query(F.data.startswith("booking_complete:"))
 async def callback_complete_booking(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Handle equipment return.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Возврат оборудования."""
     booking_id = int(callback.data.split(":", 1)[1])
 
     async with async_session_maker() as session:
@@ -271,11 +228,9 @@ async def callback_complete_booking(callback: CallbackQuery, state: FSMContext, 
         await callback.answer("Эту бронь нельзя завершить", show_alert=True)
         return
 
-    # Check if photo is required
     requires_photo = booking.equipment.requires_photo if booking.equipment else False
 
     if requires_photo:
-        # Start photo upload flow
         await state.set_state(CompleteBookingStates.uploading_photos)
         await state.update_data(
             complete_booking_id=booking_id,
@@ -290,7 +245,6 @@ async def callback_complete_booking(callback: CallbackQuery, state: FSMContext, 
             reply_markup=get_photo_upload_keyboard()
         )
     else:
-        # Complete without photos
         async with async_session_maker() as session:
             result = await crud.complete_booking(session, booking_id)
 
@@ -312,18 +266,11 @@ async def callback_complete_booking(callback: CallbackQuery, state: FSMContext, 
     await callback.answer()
 
 
-# ============== CANCEL BOOKING ==============
+# ============== ОТМЕНА БРОНИ ==============
 
 @router.callback_query(F.data.startswith("booking_cancel:"))
 async def callback_cancel_booking(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Cancel user's booking.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Отмена брони пользователем."""
     booking_id = int(callback.data.split(":", 1)[1])
 
     async with async_session_maker() as session:
@@ -349,18 +296,11 @@ async def callback_cancel_booking(callback: CallbackQuery, state: FSMContext, db
         await callback.answer("Эту бронь нельзя отменить", show_alert=True)
 
 
-# ============== PHOTO UPLOAD FOR CONFIRM START ==============
+# ============== ЗАГРУЗКА ФОТО ПРИ ПОДТВЕРЖДЕНИИ ==============
 
 @router.message(ConfirmStartStates.uploading_photos, F.photo)
 async def handle_confirm_photo(message: Message, state: FSMContext, db_user: User) -> None:
-    """
-    Handle photo upload for booking confirmation.
-
-    Args:
-        message: Message with photo
-        state: FSM context
-        db_user: User from database
-    """
+    """Загрузка фото при подтверждении начала брони."""
     data = await state.get_data()
     photos = data.get("photos", [])
 
@@ -368,7 +308,7 @@ async def handle_confirm_photo(message: Message, state: FSMContext, db_user: Use
         await message.answer("Максимум 10 фото. Нажмите «Готово» для завершения.")
         return
 
-    # Get the largest photo (best quality)
+    # Берём фото наилучшего качества (последнее в списке)
     photo = message.photo[-1]
     booking_id = data.get("confirm_booking_id", "unknown")
     local_path = await save_photo_locally(
@@ -386,14 +326,7 @@ async def handle_confirm_photo(message: Message, state: FSMContext, db_user: Use
 
 @router.callback_query(ConfirmStartStates.uploading_photos, F.data == "photos:done")
 async def callback_confirm_photos_done(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Finish photo upload and confirm booking.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Завершение загрузки фото и подтверждение брони."""
     data = await state.get_data()
     booking_id = data.get("confirm_booking_id")
     photos = data.get("photos", [])
@@ -422,14 +355,7 @@ async def callback_confirm_photos_done(callback: CallbackQuery, state: FSMContex
 
 @router.callback_query(ConfirmStartStates.uploading_photos, F.data == "photos:skip")
 async def callback_confirm_photos_skip(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Skip photo upload and confirm booking without photos.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Пропустить загрузку фото и подтвердить бронь без фото."""
     data = await state.get_data()
     booking_id = data.get("confirm_booking_id")
 
@@ -456,7 +382,7 @@ async def callback_confirm_photos_skip(callback: CallbackQuery, state: FSMContex
 
 @router.callback_query(ConfirmStartStates.uploading_photos, F.data == "photos:cancel")
 async def callback_confirm_photos_cancel(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Cancel photo upload for confirmation."""
+    """Отмена загрузки фото при подтверждении."""
     await state.clear()
     await callback.message.edit_text(
         "❌ Подтверждение отменено.",
@@ -465,18 +391,11 @@ async def callback_confirm_photos_cancel(callback: CallbackQuery, state: FSMCont
     await callback.answer()
 
 
-# ============== PHOTO UPLOAD FOR COMPLETE ==============
+# ============== ЗАГРУЗКА ФОТО ПРИ ВОЗВРАТЕ ==============
 
 @router.message(CompleteBookingStates.uploading_photos, F.photo)
 async def handle_complete_photo(message: Message, state: FSMContext, db_user: User) -> None:
-    """
-    Handle photo upload for booking completion.
-
-    Args:
-        message: Message with photo
-        state: FSM context
-        db_user: User from database
-    """
+    """Загрузка фото при завершении брони."""
     data = await state.get_data()
     photos = data.get("photos", [])
 
@@ -501,14 +420,7 @@ async def handle_complete_photo(message: Message, state: FSMContext, db_user: Us
 
 @router.callback_query(CompleteBookingStates.uploading_photos, F.data == "photos:done")
 async def callback_complete_photos_done(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Finish photo upload and complete booking.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Завершение загрузки фото и закрытие брони."""
     data = await state.get_data()
     booking_id = data.get("complete_booking_id")
     photos = data.get("photos", [])
@@ -537,14 +449,7 @@ async def callback_complete_photos_done(callback: CallbackQuery, state: FSMConte
 
 @router.callback_query(CompleteBookingStates.uploading_photos, F.data == "photos:skip")
 async def callback_complete_photos_skip(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Skip photo upload and complete booking without photos.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Пропустить загрузку фото и завершить бронь без фото."""
     data = await state.get_data()
     booking_id = data.get("complete_booking_id")
 
@@ -571,7 +476,7 @@ async def callback_complete_photos_skip(callback: CallbackQuery, state: FSMConte
 
 @router.callback_query(CompleteBookingStates.uploading_photos, F.data == "photos:cancel")
 async def callback_complete_photos_cancel(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Cancel photo upload for completion."""
+    """Отмена загрузки фото при возврате."""
     await state.clear()
     await callback.message.edit_text(
         "❌ Возврат отменён.",
@@ -580,11 +485,11 @@ async def callback_complete_photos_cancel(callback: CallbackQuery, state: FSMCon
     await callback.answer()
 
 
-# ============== EQUIPMENT LIST ==============
+# ============== СПИСОК ОБОРУДОВАНИЯ ==============
 
 @router.callback_query(F.data == "menu:equipment_list")
 async def callback_equipment_list(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Show equipment categories for browsing."""
+    """Показ категорий для просмотра оборудования."""
     await state.clear()
 
     async with async_session_maker() as session:
@@ -611,7 +516,7 @@ async def callback_equipment_list(callback: CallbackQuery, state: FSMContext, db
 
 @router.callback_query(F.data.startswith("equip_list:"))
 async def callback_equip_list_category(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Show equipment in a category for browsing (not booking)."""
+    """Показ оборудования категории в режиме просмотра (не бронирования)."""
     category_name = callback.data.split(":", 1)[1]
 
     async with async_session_maker() as session:
@@ -632,11 +537,11 @@ async def callback_equip_list_category(callback: CallbackQuery, state: FSMContex
     await callback.answer()
 
 
-# ============== EQUIPMENT INFO ==============
+# ============== ИНФОРМАЦИЯ ОБ ОБОРУДОВАНИИ ==============
 
 @router.callback_query(F.data.startswith("info:"))
 async def callback_equipment_info(callback: CallbackQuery, db_user: User) -> None:
-    """Show equipment information with availability and booking button."""
+    """Показ информации об оборудовании с доступностью и кнопкой бронирования."""
     equipment_id = int(callback.data.split(":", 1)[1])
 
     async with async_session_maker() as session:
@@ -659,7 +564,6 @@ async def callback_equipment_info(callback: CallbackQuery, db_user: User) -> Non
         f"📦 Доступно: {available_count} из {equipment.quantity}\n"
     )
 
-    # Build keyboard with optional booking button
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     from aiogram.types import InlineKeyboardButton
     kb_builder = InlineKeyboardBuilder()
@@ -674,7 +578,6 @@ async def callback_equipment_info(callback: CallbackQuery, db_user: User) -> Non
     )
     keyboard = kb_builder.as_markup()
 
-    # Send photo if available
     if equipment.photo and Path(equipment.photo).exists():
         from aiogram.types import FSInputFile
         photo_file = FSInputFile(equipment.photo)
@@ -689,11 +592,11 @@ async def callback_equipment_info(callback: CallbackQuery, db_user: User) -> Non
     await callback.answer()
 
 
-# ============== EQUIPMENT LIST PAGINATION ==============
+# ============== ПАГИНАЦИЯ СПИСКА ОБОРУДОВАНИЯ ==============
 
 @router.callback_query(F.data.startswith("page:None:"))
 async def callback_equipment_list_page(callback: CallbackQuery, db_user: User) -> None:
-    """Handle equipment list pagination (no category filter) — legacy fallback."""
+    """Пагинация списка оборудования без фильтра по категории (легаси)."""
     page = int(callback.data.split(":")[-1])
 
     async with async_session_maker() as session:
@@ -715,7 +618,7 @@ async def callback_equipment_list_page(callback: CallbackQuery, db_user: User) -
 
 @router.callback_query(F.data.startswith("page:") & ~F.data.startswith("page:None:"))
 async def callback_equip_list_category_page(callback: CallbackQuery, db_user: User) -> None:
-    """Handle pagination within an equip_list category (info mode)."""
+    """Пагинация внутри категории в режиме просмотра."""
     parts = callback.data.split(":")
     category_name = parts[1]
     page = int(parts[2])
@@ -734,11 +637,11 @@ async def callback_equip_list_category_page(callback: CallbackQuery, db_user: Us
     await callback.answer()
 
 
-# ============== EQUIPMENT SEARCH ==============
+# ============== ПОИСК ОБОРУДОВАНИЯ ==============
 
 @router.callback_query(F.data == "menu:search")
 async def callback_search_start(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Start equipment search flow."""
+    """Начало поиска оборудования."""
     await state.set_state(SearchStates.entering_query)
     await callback.answer()
     await callback.message.edit_text(
@@ -750,7 +653,7 @@ async def callback_search_start(callback: CallbackQuery, state: FSMContext, db_u
 
 @router.message(SearchStates.entering_query)
 async def process_search_query(message: Message, state: FSMContext, db_user: User) -> None:
-    """Process search query and show results."""
+    """Обработка поискового запроса и показ результатов."""
     query_text = message.text.strip()
     if len(query_text) < 2:
         await message.answer("❌ Введите минимум 2 символа для поиска.")

@@ -1,4 +1,4 @@
-"""Booking flow handlers: category -> equipment -> date/time -> confirm."""
+"""Обработчики потока бронирования: категория → оборудование → дата/время → подтверждение."""
 
 from datetime import datetime, timedelta
 
@@ -26,19 +26,11 @@ from utils.helpers import now_msk, now_utc, parse_msk_naive
 router = Router(name="booking")
 
 
-# ============== START BOOKING FLOW ==============
+# ============== НАЧАЛО БРОНИРОВАНИЯ ==============
 
 @router.callback_query(F.data == "menu:book")
 async def callback_start_booking(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Start booking flow - show categories.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
-    # Clear any previous state
+    """Начало потока бронирования — показ категорий."""
     await state.clear()
 
     async with async_session_maker() as session:
@@ -65,18 +57,11 @@ async def callback_start_booking(callback: CallbackQuery, state: FSMContext, db_
     await callback.answer()
 
 
-# ============== CATEGORY SELECTION ==============
+# ============== ВЫБОР КАТЕГОРИИ ==============
 
 @router.callback_query(BookingStates.choosing_category, F.data.startswith("category:"))
 async def callback_select_category(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Handle category selection - show equipment list.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Выбор категории — показ списка оборудования."""
     category = callback.data.split(":", 1)[1]
 
     async with async_session_maker() as session:
@@ -86,7 +71,6 @@ async def callback_select_category(callback: CallbackQuery, state: FSMContext, d
         await callback.answer("В этой категории нет доступного оборудования", show_alert=True)
         return
 
-    # Save category to state
     await state.update_data(category=category, equipment_list_ids=[e.id for e in equipment_list])
     await state.set_state(BookingStates.choosing_equipment)
 
@@ -98,18 +82,11 @@ async def callback_select_category(callback: CallbackQuery, state: FSMContext, d
     await callback.answer()
 
 
-# ============== EQUIPMENT PAGINATION ==============
+# ============== ПАГИНАЦИЯ ОБОРУДОВАНИЯ ==============
 
 @router.callback_query(BookingStates.choosing_equipment, F.data.startswith("page:"))
 async def callback_equipment_page(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Handle equipment list pagination.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Пагинация списка оборудования."""
     parts = callback.data.split(":")
     category = parts[1]
     page = int(parts[2])
@@ -125,18 +102,11 @@ async def callback_equipment_page(callback: CallbackQuery, state: FSMContext, db
     await callback.answer()
 
 
-# ============== EQUIPMENT SELECTION ==============
+# ============== ВЫБОР ОБОРУДОВАНИЯ ==============
 
 @router.callback_query(BookingStates.choosing_equipment, F.data.startswith("equip:"))
 async def callback_select_equipment(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Handle equipment selection - show start date calendar.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Выбор оборудования — показ календаря даты начала."""
     equipment_id = int(callback.data.split(":", 1)[1])
 
     async with async_session_maker() as session:
@@ -146,7 +116,6 @@ async def callback_select_equipment(callback: CallbackQuery, state: FSMContext, 
         await callback.answer("Это оборудование недоступно", show_alert=True)
         return
 
-    # Save equipment to state
     await state.update_data(
         equipment_id=equipment_id,
         equipment_name=equipment.name,
@@ -172,11 +141,11 @@ async def callback_select_equipment(callback: CallbackQuery, state: FSMContext, 
     await callback.answer()
 
 
-# ============== CALENDAR NAVIGATION ==============
+# ============== НАВИГАЦИЯ ПО КАЛЕНДАРЮ ==============
 
 @router.callback_query(BookingStates.choosing_date_start, F.data.startswith("cal:date_start:"))
 async def callback_calendar_start_nav(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Navigate start date calendar."""
+    """Навигация по календарю даты начала."""
     parts = callback.data.split(":")
     year = int(parts[2])
     month = int(parts[3])
@@ -204,7 +173,7 @@ async def callback_calendar_start_nav(callback: CallbackQuery, state: FSMContext
 
 @router.callback_query(BookingStates.choosing_date_end, F.data.startswith("cal:date_end:"))
 async def callback_calendar_end_nav(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Navigate end date calendar."""
+    """Навигация по календарю даты окончания."""
     parts = callback.data.split(":")
     year = int(parts[2])
     month = int(parts[3])
@@ -214,7 +183,7 @@ async def callback_calendar_end_nav(callback: CallbackQuery, state: FSMContext, 
     start_date = data.get("start_date", "")
     start_time = data.get("start_time", "")
 
-    # Min date is start date, max is start + max_duration
+    # Минимальная дата — дата начала, максимальная — начало + макс. длительность
     start_dt = datetime.strptime(f"{start_date} {start_time}", "%Y-%m-%d %H:%M")
     max_date = start_dt + timedelta(hours=settings.max_booking_duration_hours)
 
@@ -234,29 +203,20 @@ async def callback_calendar_end_nav(callback: CallbackQuery, state: FSMContext, 
     await callback.answer()
 
 
-# ============== START DATE SELECTION ==============
+# ============== ВЫБОР ДАТЫ НАЧАЛА ==============
 
 @router.callback_query(BookingStates.choosing_date_start, F.data.startswith("date_start:"))
 async def callback_select_start_date(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Handle start date selection - show start time keyboard.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Выбор даты начала — показ клавиатуры времени."""
     date_str = callback.data.split(":", 1)[1]
 
-    # Save start date to state
     await state.update_data(start_date=date_str)
     await state.set_state(BookingStates.choosing_time_start)
 
     data = await state.get_data()
     equipment_name = data.get("equipment_name", "")
-    category = data.get("category", "")
 
-    # Filter past times if today is selected
+    # Отсекаем прошедшее время, если выбран сегодняшний день
     now = now_msk()
     min_time = now if date_str == now.strftime("%Y-%m-%d") else None
 
@@ -273,21 +233,13 @@ async def callback_select_start_date(callback: CallbackQuery, state: FSMContext,
     await callback.answer()
 
 
-# ============== START TIME SELECTION ==============
+# ============== ВЫБОР ВРЕМЕНИ НАЧАЛА ==============
 
 @router.callback_query(BookingStates.choosing_time_start, F.data.startswith("time_start:"))
 async def callback_select_start_time(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Handle start time selection - show end date calendar.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Выбор времени начала — показ календаря даты окончания."""
     time_str = callback.data.split(":", 1)[1]
 
-    # Save start time to state
     await state.update_data(start_time=time_str)
     await state.set_state(BookingStates.choosing_date_end)
 
@@ -295,7 +247,6 @@ async def callback_select_start_time(callback: CallbackQuery, state: FSMContext,
     equipment_name = data.get("equipment_name", "")
     start_date = data.get("start_date", "")
 
-    # Calculate min/max dates for end
     start_dt = datetime.strptime(f"{start_date} {time_str}", "%Y-%m-%d %H:%M")
     max_date = start_dt + timedelta(hours=settings.max_booking_duration_hours)
 
@@ -315,21 +266,13 @@ async def callback_select_start_time(callback: CallbackQuery, state: FSMContext,
     await callback.answer()
 
 
-# ============== END DATE SELECTION ==============
+# ============== ВЫБОР ДАТЫ ОКОНЧАНИЯ ==============
 
 @router.callback_query(BookingStates.choosing_date_end, F.data.startswith("date_end:"))
 async def callback_select_end_date(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Handle end date selection - show end time keyboard.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Выбор даты окончания — показ клавиатуры времени."""
     date_str = callback.data.split(":", 1)[1]
 
-    # Save end date to state
     await state.update_data(end_date=date_str)
     await state.set_state(BookingStates.choosing_time_end)
 
@@ -351,21 +294,13 @@ async def callback_select_end_date(callback: CallbackQuery, state: FSMContext, d
     await callback.answer()
 
 
-# ============== END TIME SELECTION ==============
+# ============== ВЫБОР ВРЕМЕНИ ОКОНЧАНИЯ ==============
 
 @router.callback_query(BookingStates.choosing_time_end, F.data.startswith("time_end:"))
 async def callback_select_end_time(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Handle end time selection - show booking summary for confirmation.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Выбор времени окончания — показ сводки для подтверждения."""
     time_str = callback.data.split(":", 1)[1]
 
-    # Save end time to state
     await state.update_data(end_time=time_str)
     await state.set_state(BookingStates.confirming)
 
@@ -375,11 +310,11 @@ async def callback_select_end_time(callback: CallbackQuery, state: FSMContext, d
     start_time = data.get("start_time", "")
     end_date = data.get("end_date", "")
 
-    # Validate: end must be after start
+    # Пользователь вводит время в МСК, конвертируем в UTC для сравнения
     start_dt = parse_msk_naive(start_date, start_time)
     end_dt = parse_msk_naive(end_date, time_str)
 
-    # Check start time is still in the future
+    # Проверяем, что время начала ещё не прошло
     if start_dt < now_utc():
         await callback.answer("Выбранное время начала уже в прошлом. Создайте новую бронь.", show_alert=True)
         await state.clear()
@@ -388,11 +323,9 @@ async def callback_select_end_time(callback: CallbackQuery, state: FSMContext, d
 
     if end_dt <= start_dt:
         await callback.answer("Время окончания должно быть позже начала!", show_alert=True)
-        # Go back to time selection
         await state.set_state(BookingStates.choosing_time_end)
         return
 
-    # Calculate duration
     duration = end_dt - start_dt
     hours = int(duration.total_seconds() // 3600)
     minutes = int((duration.total_seconds() % 3600) // 60)
@@ -410,18 +343,11 @@ async def callback_select_end_time(callback: CallbackQuery, state: FSMContext, d
     await callback.answer()
 
 
-# ============== BOOKING CONFIRMATION ==============
+# ============== ПОДТВЕРЖДЕНИЕ БРОНИРОВАНИЯ ==============
 
 @router.callback_query(BookingStates.confirming, F.data == "booking:confirm")
 async def callback_confirm_booking(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Confirm and create booking.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Подтверждение и создание брони."""
     data = await state.get_data()
 
     equipment_id = data.get("equipment_id")
@@ -431,11 +357,11 @@ async def callback_confirm_booking(callback: CallbackQuery, state: FSMContext, d
     end_date = data.get("end_date", "")
     end_time = data.get("end_time", "")
 
-    # Parse datetime as UTC-aware (user entered times in MSK)
+    # Время пользователя в МСК → UTC
     start_dt = parse_msk_naive(start_date, start_time)
     end_dt = parse_msk_naive(end_date, end_time)
 
-    # Validate start time is not in the past
+    # Повторная проверка: время начала не в прошлом
     now = now_utc()
     if start_dt < now:
         await callback.answer("Выбранное время уже в прошлом. Создайте новую бронь.", show_alert=True)
@@ -443,7 +369,6 @@ async def callback_confirm_booking(callback: CallbackQuery, state: FSMContext, d
         await callback.message.edit_text("❌ Время бронирования истекло.", reply_markup=get_main_menu_keyboard())
         return
 
-    # Create booking
     async with async_session_maker() as session:
         result = await crud.create_booking(
             session=session,
@@ -453,11 +378,9 @@ async def callback_confirm_booking(callback: CallbackQuery, state: FSMContext, d
             end_time=end_dt,
         )
 
-    # Clear state
     await state.clear()
 
     if isinstance(result, str):
-        # Error message
         await callback.message.edit_text(
             f"❌ <b>Ошибка бронирования</b>\n\n"
             f"{result}\n\n"
@@ -466,7 +389,6 @@ async def callback_confirm_booking(callback: CallbackQuery, state: FSMContext, d
         )
         logger.warning(f"Booking failed for user {db_user.telegram_id}: {result}")
     else:
-        # Success
         booking: Booking = result
         await callback.message.edit_text(
             f"✅ <b>Бронь создана!</b>\n\n"
@@ -484,18 +406,11 @@ async def callback_confirm_booking(callback: CallbackQuery, state: FSMContext, d
     await callback.answer()
 
 
-# ============== CANCEL BOOKING FLOW ==============
+# ============== ОТМЕНА СОЗДАНИЯ БРОНИ ==============
 
 @router.callback_query(F.data == "booking:cancel")
 async def callback_cancel_booking_flow(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """
-    Cancel booking creation flow.
-
-    Args:
-        callback: Callback query
-        state: FSM context
-        db_user: User from database
-    """
+    """Отмена создания брони."""
     await state.clear()
 
     await callback.message.edit_text(
@@ -506,11 +421,11 @@ async def callback_cancel_booking_flow(callback: CallbackQuery, state: FSMContex
     await callback.answer()
 
 
-# ============== BOOK FROM INFO PAGE ==============
+# ============== БРОНИРОВАНИЕ СО СТРАНИЦЫ ОБОРУДОВАНИЯ ==============
 
 @router.callback_query(F.data.startswith("book_equip:"))
 async def callback_book_from_info(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Start booking flow directly from equipment info page."""
+    """Начало бронирования прямо со страницы информации об оборудовании."""
     equipment_id = int(callback.data.split(":", 1)[1])
 
     async with async_session_maker() as session:
@@ -551,11 +466,11 @@ async def callback_book_from_info(callback: CallbackQuery, state: FSMContext, db
     await callback.answer()
 
 
-# ============== BACK NAVIGATION ==============
+# ============== НАВИГАЦИЯ НАЗАД ==============
 
 @router.callback_query(F.data == "booking:back_to_equipment")
 async def callback_back_to_equipment(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Go back to equipment list."""
+    """Назад к списку оборудования."""
     data = await state.get_data()
     category = data.get("category")
     if not category:
@@ -575,7 +490,7 @@ async def callback_back_to_equipment(callback: CallbackQuery, state: FSMContext,
 
 @router.callback_query(F.data == "booking:back_to_date_start")
 async def callback_back_to_date_start(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Go back to start date calendar."""
+    """Назад к выбору даты начала."""
     data = await state.get_data()
     equipment_name = data.get("equipment_name", "")
     now = now_msk()
@@ -593,7 +508,7 @@ async def callback_back_to_date_start(callback: CallbackQuery, state: FSMContext
 
 @router.callback_query(F.data == "booking:back_to_time_start")
 async def callback_back_to_time_start(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Go back to start time selection."""
+    """Назад к выбору времени начала."""
     data = await state.get_data()
     equipment_name = data.get("equipment_name", "")
     start_date = data.get("start_date", "")
@@ -613,7 +528,7 @@ async def callback_back_to_time_start(callback: CallbackQuery, state: FSMContext
 
 @router.callback_query(F.data == "booking:back_to_date_end")
 async def callback_back_to_date_end(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Go back to end date calendar."""
+    """Назад к выбору даты окончания."""
     data = await state.get_data()
     equipment_name = data.get("equipment_name", "")
     start_date = data.get("start_date", "")
@@ -632,9 +547,9 @@ async def callback_back_to_date_end(callback: CallbackQuery, state: FSMContext, 
     await callback.answer()
 
 
-# ============== NOOP CALLBACK ==============
+# ============== ЗАГЛУШКА NOOP ==============
 
 @router.callback_query(F.data == "noop")
 async def callback_noop(callback: CallbackQuery) -> None:
-    """Handle noop callbacks (calendar headers, page counters, etc.)."""
+    """Обработка noop-коллбэков (заголовки календаря, счётчики страниц и т.п.)."""
     await callback.answer()

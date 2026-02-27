@@ -1,4 +1,4 @@
-"""APScheduler tasks: reminders, expiration, overdue checks, auto-complete, heartbeat."""
+"""Задачи планировщика: напоминания, истечение броней, просрочки, автозавершение, heartbeat."""
 
 import os
 from datetime import datetime, timedelta, timezone
@@ -17,13 +17,10 @@ HEARTBEAT_FILE = "logs/scheduler_heartbeat"
 
 async def check_booking_confirmations(bot: Bot) -> None:
     """
-    Check for pending bookings that need to be expired.
+    Истекает ожидающие брони, если пользователь не подтвердил начало.
 
-    Runs every 1 minute. Expires pending bookings where:
-    - start_time < now - confirmation_timeout_minutes
-
-    Args:
-        bot: Bot instance for sending messages
+    Запускается каждую минуту. Истекает pending-брони, у которых:
+    start_time + confirmation_timeout_minutes < now
     """
     try:
         async with async_session_maker() as session:
@@ -34,10 +31,8 @@ async def check_booking_confirmations(bot: Bot) -> None:
             expired_count = 0
 
             for booking in bookings:
-                # Expire the booking
                 await crud.expire_booking(session, booking.id)
 
-                # Notify user
                 try:
                     await bot.send_message(
                         chat_id=booking.user_id,
@@ -68,14 +63,10 @@ async def check_booking_confirmations(bot: Bot) -> None:
 
 async def send_confirmation_reminders(bot: Bot) -> None:
     """
-    Send reminders to confirm booking start.
+    Отправляет напоминания подтвердить начало брони.
 
-    Runs every 1 minute. Sends reminder for pending bookings where:
-    - start_time is within 5 minutes from now (past or future)
-    - User hasn't confirmed yet
-
-    Args:
-        bot: Bot instance for sending messages
+    Запускается каждую минуту. Отправляет напоминание для pending-броней,
+    у которых start_time в пределах 5 минут (прошедших или будущих).
     """
     try:
         async with async_session_maker() as session:
@@ -127,14 +118,10 @@ async def send_confirmation_reminders(bot: Bot) -> None:
 
 async def send_end_reminders(bot: Bot) -> None:
     """
-    Send reminders to return equipment before booking ends.
+    Отправляет напоминания вернуть оборудование до окончания брони.
 
-    Runs every 5 minutes. Sends reminder for active bookings where:
-    - end_time is within reminder_minutes_before (default 15 min)
-    - reminder_sent flag is False
-
-    Args:
-        bot: Bot instance for sending messages
+    Запускается каждые 5 минут. Напоминает об активных бронях,
+    у которых end_time наступит в течение reminder_minutes_before (по умолчанию 15 мин).
     """
     try:
         async with async_session_maker() as session:
@@ -181,15 +168,11 @@ async def send_end_reminders(bot: Bot) -> None:
 
 async def check_overdue_returns(bot: Bot) -> None:
     """
-    Check for overdue equipment returns and notify users/admins.
+    Проверяет просроченные возвраты и уведомляет пользователей и администраторов.
 
-    Runs every 5 minutes. For active bookings where end_time has passed:
-    - Sends immediate notification to user
-    - If overdue > overdue_alert_minutes (default 30 min), notify admins
-    - Sets is_overdue flag
-
-    Args:
-        bot: Bot instance for sending messages
+    Запускается каждые 5 минут. Для активных броней с истёкшим end_time:
+    - Сразу уведомляет пользователя (один раз)
+    - Если просрочка > overdue_alert_minutes (по умолчанию 30 мин) — уведомляет администраторов
     """
     try:
         async with async_session_maker() as session:
@@ -205,7 +188,7 @@ async def check_overdue_returns(bot: Bot) -> None:
                 overdue_duration = now - booking.end_time
                 overdue_minutes = int(overdue_duration.total_seconds() / 60)
 
-                # Notify user about overdue (only once)
+                # Уведомляем пользователя один раз
                 if not booking.overdue_notified:
                     try:
                         keyboard = get_booking_actions_keyboard(booking)
@@ -221,7 +204,6 @@ async def check_overdue_returns(bot: Bot) -> None:
                             reply_markup=keyboard
                         )
 
-                        # Mark as notified to prevent duplicates
                         await crud.set_overdue_notified(session, booking.id)
 
                         user_notified += 1
@@ -234,15 +216,12 @@ async def check_overdue_returns(bot: Bot) -> None:
                             f"Failed to notify user {booking.user_id} about overdue booking {booking.id}: {e}"
                         )
 
-                # If seriously overdue and not already flagged, notify admins
+                # Если критическая просрочка и флаг ещё не выставлен — уведомляем администраторов
                 if overdue_duration >= admin_alert_threshold and not booking.is_overdue:
-                    # Mark as overdue
                     await crud.set_booking_overdue(session, booking.id)
 
-                    # Get all admins
                     admins = await crud.get_all_admins(session)
 
-                    # Notify each admin
                     for admin in admins:
                         try:
                             await bot.send_message(
@@ -280,12 +259,9 @@ async def check_overdue_returns(bot: Bot) -> None:
 
 async def auto_complete_old_bookings(bot: Bot) -> None:
     """
-    Auto-complete active bookings that exceeded end_time by 24+ hours.
+    Автоматически завершает активные брони, у которых end_time прошёл 24+ часа назад.
 
-    Runs every 60 minutes. Prevents stuck "active" bookings from lingering forever.
-
-    Args:
-        bot: Bot instance for sending messages
+    Запускается каждые 60 минут. Предотвращает зависание броней в статусе «active».
     """
     try:
         async with async_session_maker() as session:
@@ -298,7 +274,6 @@ async def auto_complete_old_bookings(bot: Bot) -> None:
             for booking in bookings:
                 await crud.force_complete_booking(session, booking.id)
 
-                # Notify user
                 try:
                     await bot.send_message(
                         chat_id=booking.user_id,
@@ -329,13 +304,10 @@ async def auto_complete_old_bookings(bot: Bot) -> None:
 
 async def scheduler_heartbeat(bot: Bot) -> None:
     """
-    Write heartbeat timestamp to file for health monitoring.
+    Записывает временную метку в файл для мониторинга работоспособности.
 
-    Runs every 30 minutes. On bot startup, the heartbeat file is checked
-    to detect if the scheduler was down.
-
-    Args:
-        bot: Bot instance (unused, required by scheduler interface)
+    Запускается каждые 30 минут. При старте бота файл проверяется
+    для обнаружения простоя планировщика.
     """
     try:
         os.makedirs(os.path.dirname(HEARTBEAT_FILE), exist_ok=True)

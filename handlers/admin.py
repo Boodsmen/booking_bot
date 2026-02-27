@@ -1,4 +1,4 @@
-"""Admin handlers with button-based interface."""
+"""Хендлеры администратора."""
 
 import asyncio
 import inspect
@@ -43,10 +43,10 @@ from services.import_excel import parse_equipment_excel
 router = Router(name="admin")
 
 
-# ============== ADMIN CHECK DECORATOR ==============
+# ============== ДЕКОРАТОР ПРОВЕРКИ АДМИНИСТРАТОРА ==============
 
 def admin_only(handler):
-    """Decorator to check if user is admin."""
+    """Декоратор проверки прав администратора."""
     @wraps(handler)
     async def wrapper(event, state: FSMContext, db_user: User, **kwargs):
         if not db_user.is_admin:
@@ -64,7 +64,7 @@ def admin_only(handler):
     return wrapper
 
 
-# ============== ADMIN MAIN MENU ==============
+# ============== ГЛАВНОЕ МЕНЮ АДМИНИСТРАТОРА ==============
 
 @router.message(Command("admin"))
 @admin_only
@@ -87,7 +87,7 @@ async def callback_admin_main(callback: CallbackQuery, state: FSMContext, db_use
     await callback.answer()
 
 
-# ============== EQUIPMENT MENU ==============
+# ============== МЕНЮ ОБОРУДОВАНИЯ ==============
 
 @router.callback_query(F.data == "admin:equipment_menu")
 @admin_only
@@ -100,7 +100,7 @@ async def callback_equipment_menu(callback: CallbackQuery, state: FSMContext, db
     await callback.answer()
 
 
-# ============== ADD EQUIPMENT INFO ==============
+# ============== ИНФОРМАЦИЯ О ДОБАВЛЕНИИ ОБОРУДОВАНИЯ ==============
 
 @router.callback_query(F.data == "admin:add_equipment_info")
 @admin_only
@@ -138,7 +138,7 @@ async def callback_add_equipment_info(callback: CallbackQuery, state: FSMContext
 @router.callback_query(F.data == "admin:start_add_equipment")
 @admin_only
 async def callback_start_add_equipment(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Start equipment adding - select category from DB."""
+    """Начало добавления оборудования — выбор категории из БД."""
     async with async_session_maker() as session:
         categories = await crud.get_all_categories_from_db(session)
 
@@ -158,12 +158,12 @@ async def callback_start_add_equipment(callback: CallbackQuery, state: FSMContex
     await callback.answer()
 
 
-# ============== LIST ALL EQUIPMENT ==============
+# ============== СПИСОК ВСЕГО ОБОРУДОВАНИЯ ==============
 
 @router.callback_query(F.data == "admin:list_all_equipment")
 @admin_only
 async def callback_list_all_equipment(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Show category buttons to browse equipment."""
+    """Просмотр оборудования по категориям."""
     async with async_session_maker() as session:
         categories = await crud.get_all_categories_from_db(session)
 
@@ -185,13 +185,13 @@ async def callback_list_all_equipment(callback: CallbackQuery, state: FSMContext
 @router.callback_query(F.data.startswith("admin_equip_cat:"))
 @admin_only
 async def callback_admin_equip_by_category(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Show paginated equipment list for a category."""
+    """Список оборудования категории с пагинацией."""
     from aiogram.types import InlineKeyboardButton
     from aiogram.utils.keyboard import InlineKeyboardBuilder
 
     category_id = int(callback.data.split(":")[1])
     page = 0
-    # Support page in callback: admin_equip_cat:ID:PAGE
+    # Формат callback: admin_equip_cat:ID:PAGE
     parts = callback.data.split(":")
     if len(parts) == 3:
         page = int(parts[2])
@@ -238,7 +238,7 @@ async def callback_admin_equip_by_category(callback: CallbackQuery, state: FSMCo
     await callback.answer()
 
 
-# ============== LIST DISABLED EQUIPMENT ==============
+# ============== СНЯТОЕ С ОБОРОТА ==============
 
 @router.callback_query(F.data == "admin:list_disabled_equipment")
 @admin_only
@@ -286,7 +286,7 @@ async def callback_list_disabled_equipment(callback: CallbackQuery, state: FSMCo
     await callback.answer()
 
 
-# ============== MANAGE EQUIPMENT INFO ==============
+# ============== УПРАВЛЕНИЕ ОБОРУДОВАНИЕМ ==============
 
 @router.callback_query(F.data == "admin:manage_equipment_info")
 @admin_only
@@ -317,7 +317,7 @@ async def callback_manage_equipment_info(callback: CallbackQuery, state: FSMCont
     await callback.answer()
 
 
-# ============== ENABLE/DISABLE EQUIPMENT ==============
+# ============== ВКЛЮЧЕНИЕ/ОТКЛЮЧЕНИЕ ОБОРУДОВАНИЯ ==============
 
 @router.callback_query(F.data.startswith("admin:enable_eq:"))
 @admin_only
@@ -353,12 +353,12 @@ async def callback_disable_equipment(callback: CallbackQuery, state: FSMContext,
     await callback_equipment_menu(callback, state, db_user)
 
 
-# ============== ADD EQUIPMENT FLOW ==============
+# ============== ДОБАВЛЕНИЕ ОБОРУДОВАНИЯ ==============
 
 @router.callback_query(F.data.startswith("admin_cat:"), AddEquipmentStates.waiting_category)
 @admin_only
 async def process_category_button(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Process category selection from DB categories."""
+    """Выбор категории из БД."""
     category_id = int(callback.data.split(":", 1)[1])
 
     async with async_session_maker() as session:
@@ -498,7 +498,7 @@ async def process_photo_required(callback: CallbackQuery, state: FSMContext, db_
 
 
 async def _finish_add_equipment(event, state: FSMContext, db_user: User, photo_path: str | None = None):
-    """Finalize equipment creation."""
+    """Завершение создания оборудования."""
     data = await state.get_data()
 
     async with async_session_maker() as session:
@@ -551,8 +551,8 @@ async def process_equipment_photo_skip(callback: CallbackQuery, state: FSMContex
 @router.message(AddEquipmentStates.waiting_photo, F.photo)
 @admin_only
 async def process_equipment_photo(message: Message, state: FSMContext, db_user: User) -> None:
-    """Save equipment photo locally."""
-    photo = message.photo[-1]  # Best quality
+    """Сохранение фото оборудования."""
+    photo = message.photo[-1]  # Лучшее качество
     photos_dir = Path("data/photos/equipment")
     photos_dir.mkdir(parents=True, exist_ok=True)
 
@@ -572,7 +572,7 @@ async def process_equipment_photo_invalid(message: Message, state: FSMContext, d
     await message.answer("❌ Отправьте фото или нажмите «Пропустить».")
 
 
-# ============== USERS MENU ==============
+# ============== МЕНЮ ПОЛЬЗОВАТЕЛЕЙ ==============
 
 @router.callback_query(F.data == "admin:users_menu")
 @admin_only
@@ -720,21 +720,20 @@ async def process_user_phone(message: Message, state: FSMContext, db_user: User)
 @router.callback_query(F.data.startswith("user_admin:"), AddUserStates.waiting_admin_status)
 @admin_only
 async def process_user_admin_status(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Process admin status, then ask for category access."""
+    """Выбор прав доступа, затем выбор категорий."""
     is_admin = callback.data.split(":")[1] == "yes"
     await state.update_data(user_is_admin=is_admin)
 
-    # If admin, skip category selection (admins have access to all)
+    # Администраторам доступно всё — пропускаем выбор категорий
     if is_admin:
         await _create_user_and_finish(callback, state, db_user, selected_category_ids=[])
         return
 
-    # Show category selection for regular users
     async with async_session_maker() as session:
         categories = await crud.get_all_categories_from_db(session)
 
     if not categories:
-        # No categories in DB, just create user
+        # Нет категорий в БД — создаём пользователя без ограничений
         await _create_user_and_finish(callback, state, db_user, selected_category_ids=[])
         return
 
@@ -753,7 +752,7 @@ async def process_user_admin_status(callback: CallbackQuery, state: FSMContext, 
 @router.callback_query(F.data.startswith("user_cat_toggle:"), AddUserStates.waiting_categories)
 @admin_only
 async def process_user_cat_toggle(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Toggle category selection."""
+    """Переключение выбора категории."""
     cat_id = int(callback.data.split(":")[1])
     data = await state.get_data()
     selected = data.get("selected_category_ids", [])
@@ -780,7 +779,7 @@ async def process_user_cat_toggle(callback: CallbackQuery, state: FSMContext, db
 @router.callback_query(F.data == "user_cat_done", AddUserStates.waiting_categories)
 @admin_only
 async def process_user_cat_done(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Save selected categories and create user."""
+    """Сохранение категорий и создание пользователя."""
     data = await state.get_data()
     selected = data.get("selected_category_ids", [])
     await _create_user_and_finish(callback, state, db_user, selected_category_ids=selected)
@@ -789,7 +788,7 @@ async def process_user_cat_done(callback: CallbackQuery, state: FSMContext, db_u
 @router.callback_query(F.data == "user_cat_skip", AddUserStates.waiting_categories)
 @admin_only
 async def process_user_cat_skip(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Skip category selection = access to all."""
+    """Пропуск выбора категорий — доступ ко всем."""
     await _create_user_and_finish(callback, state, db_user, selected_category_ids=[])
 
 
@@ -799,7 +798,7 @@ async def _create_user_and_finish(
     db_user: User,
     selected_category_ids: list[int],
 ) -> None:
-    """Helper: create user and show result."""
+    """Создание пользователя и отображение результата."""
     data = await state.get_data()
     is_admin = data.get("user_is_admin", False)
 
@@ -839,7 +838,7 @@ async def _create_user_and_finish(
     await callback.answer("✅ Добавлен!", show_alert=True)
 
 
-# ============== BOOKINGS MENU ==============
+# ============== МЕНЮ БРОНИРОВАНИЙ ==============
 
 @router.callback_query(F.data == "admin:bookings_menu")
 @admin_only
@@ -852,7 +851,7 @@ async def callback_bookings_menu(callback: CallbackQuery, state: FSMContext, db_
     await callback.answer()
 
 
-# ============== LIST ACTIVE BOOKINGS ==============
+# ============== АКТИВНЫЕ БРОНИ ==============
 
 @router.callback_query(F.data == "admin:list_active_bookings")
 @admin_only
@@ -898,7 +897,7 @@ async def callback_list_active_bookings(callback: CallbackQuery, state: FSMConte
     await callback.answer()
 
 
-# ============== LIST PENDING BOOKINGS ==============
+# ============== ОЖИДАЮЩИЕ БРОНИ ==============
 
 @router.callback_query(F.data == "admin:list_pending_bookings")
 @admin_only
@@ -941,7 +940,7 @@ async def callback_list_pending_bookings(callback: CallbackQuery, state: FSMCont
     await callback.answer()
 
 
-# ============== BOOKING DETAILS ==============
+# ============== ДЕТАЛИ БРОНИ ==============
 
 @router.callback_query(F.data.startswith("admin:booking:"))
 @admin_only
@@ -964,7 +963,7 @@ async def callback_booking_details(callback: CallbackQuery, state: FSMContext, d
     await callback.answer()
 
 
-# ============== COMPLETE BOOKING ==============
+# ============== ЗАВЕРШЕНИЕ БРОНИ ==============
 
 @router.callback_query(F.data.startswith("admin:complete:"))
 @admin_only
@@ -990,7 +989,7 @@ async def callback_complete_booking(callback: CallbackQuery, state: FSMContext, 
     await callback_list_active_bookings(callback, state, db_user)
 
 
-# ============== CANCEL BOOKING ==============
+# ============== ОТМЕНА БРОНИ ==============
 
 @router.callback_query(F.data.startswith("admin:cancel:"))
 @admin_only
@@ -1015,7 +1014,7 @@ async def callback_cancel_booking(callback: CallbackQuery, state: FSMContext, db
         await callback.answer("❌ Не удалось отменить. Используйте «Завершить» для активных броней.", show_alert=True)
 
 
-# ============== GET BOOKING PHOTOS ==============
+# ============== ФОТО БРОНИ ==============
 
 @router.callback_query(F.data.startswith("admin:photos:"))
 @admin_only
@@ -1040,17 +1039,14 @@ async def callback_get_booking_photos(callback: CallbackQuery, state: FSMContext
     from aiogram.types import InputMediaPhoto
     import os
 
-    # Send start photos
     if booking.photos_start:
         await callback.message.answer(f"📸 <b>Фото начала ({len(booking.photos_start)} шт.):</b>")
         media_group = []
         for photo_ref in booking.photos_start:
             if photo_ref.startswith("/"):
-                # Local file path
                 if os.path.exists(photo_ref):
                     media_group.append(InputMediaPhoto(media=FSInputFile(photo_ref)))
             else:
-                # Telegram file_id
                 media_group.append(InputMediaPhoto(media=photo_ref))
 
         if media_group:
@@ -1065,7 +1061,6 @@ async def callback_get_booking_photos(callback: CallbackQuery, state: FSMContext
     else:
         await callback.message.answer("📸 Фото начала: <i>нет</i>")
 
-    # Send end photos
     if booking.photos_end:
         await callback.message.answer(f"📸 <b>Фото конца ({len(booking.photos_end)} шт.):</b>")
         media_group = []
@@ -1094,7 +1089,7 @@ async def callback_get_booking_photos(callback: CallbackQuery, state: FSMContext
     )
 
 
-# ============== MAINTENANCE MENU ==============
+# ============== МЕНЮ ТЕХОБСЛУЖИВАНИЯ ==============
 
 @router.callback_query(F.data == "admin:maintenance_menu")
 @admin_only
@@ -1334,7 +1329,7 @@ async def callback_maintenance_select_end_time(callback: CallbackQuery, state: F
 @router.callback_query(F.data == "maint:back_date_start")
 @admin_only
 async def callback_maint_back_to_date_start(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Go back to start date selection in maintenance flow."""
+    """Возврат к выбору даты начала ТО."""
     data = await state.get_data()
     now = now_msk()
     max_date = now + timedelta(days=90)
@@ -1352,7 +1347,7 @@ async def callback_maint_back_to_date_start(callback: CallbackQuery, state: FSMC
 @router.callback_query(F.data == "maint:back_time_start")
 @admin_only
 async def callback_maint_back_to_time_start(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Go back to start time selection in maintenance flow."""
+    """Возврат к выбору времени начала ТО."""
     data = await state.get_data()
     start_date = data.get("start_date", "")
     now = now_msk()
@@ -1371,7 +1366,7 @@ async def callback_maint_back_to_time_start(callback: CallbackQuery, state: FSMC
 @router.callback_query(F.data == "maint:back_date_end")
 @admin_only
 async def callback_maint_back_to_date_end(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Go back to end date selection in maintenance flow."""
+    """Возврат к выбору даты окончания ТО."""
     data = await state.get_data()
     start_dt = datetime.strptime(f"{data['start_date']} {data['start_time']}", "%Y-%m-%d %H:%M")
     max_date = start_dt + timedelta(days=90)
@@ -1489,7 +1484,7 @@ async def callback_complete_maintenance(callback: CallbackQuery, state: FSMConte
     await callback_list_maintenance(callback, state, db_user)
 
 
-# ============== REPORTS MENU ==============
+# ============== МЕНЮ ОТЧЁТОВ ==============
 
 @router.callback_query(F.data == "admin:reports_menu")
 @admin_only
@@ -1504,7 +1499,6 @@ async def callback_reports_menu(callback: CallbackQuery, state: FSMContext, db_u
     await callback.answer()
 
 
-# --- Report filter: by category ---
 @router.callback_query(F.data == "report_filter:category")
 @admin_only
 async def callback_report_filter_category(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
@@ -1542,7 +1536,6 @@ async def callback_report_select_category(callback: CallbackQuery, state: FSMCon
     await callback.answer()
 
 
-# --- Report filter: by user ---
 @router.callback_query(F.data == "report_filter:user")
 @admin_only
 async def callback_report_filter_user(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
@@ -1594,7 +1587,6 @@ async def callback_report_select_user(callback: CallbackQuery, state: FSMContext
     await callback.answer()
 
 
-# --- Report filter: period only ---
 @router.callback_query(F.data == "report_filter:period")
 @admin_only
 async def callback_report_filter_period(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
@@ -1607,7 +1599,6 @@ async def callback_report_filter_period(callback: CallbackQuery, state: FSMConte
     await callback.answer()
 
 
-# --- Report filter: all ---
 @router.callback_query(F.data == "report_filter:all")
 @admin_only
 async def callback_report_filter_all(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
@@ -1620,7 +1611,6 @@ async def callback_report_filter_all(callback: CallbackQuery, state: FSMContext,
     await callback.answer()
 
 
-# --- Report period selection ---
 @router.callback_query(ReportStates.choosing_period, F.data.startswith("report_period:"))
 @admin_only
 async def callback_report_period(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
@@ -1661,7 +1651,6 @@ async def callback_report_period(callback: CallbackQuery, state: FSMContext, db_
 
         file = FSInputFile(report_path)
 
-        # Build caption
         filter_parts = []
         if data.get("report_category_name"):
             filter_parts.append(f"Категория: {data['report_category_name']}")
@@ -1769,11 +1758,11 @@ async def process_report_end_date(message: Message, state: FSMContext, db_user: 
         )
 
 
-# Legacy report buttons (redirect to new flow)
+# Легаси-кнопки отчётов (перенаправляют в новый флоу)
 @router.callback_query(F.data.startswith("admin:report:"))
 @admin_only
 async def callback_generate_report_legacy(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Legacy report button handler - generate report directly."""
+    """Легаси-обработчик отчёта — генерация напрямую."""
     days = int(callback.data.split(":")[2])
 
     await callback.answer()
@@ -1811,12 +1800,12 @@ async def callback_generate_report_legacy(callback: CallbackQuery, state: FSMCon
         )
 
 
-# ============== EXCEL IMPORT ==============
+# ============== ИМПОРТ ИЗ EXCEL ==============
 
 @router.callback_query(F.data == "admin:import_excel")
 @admin_only
 async def callback_import_excel(callback: CallbackQuery, state: FSMContext, db_user: User) -> None:
-    """Start Excel import flow."""
+    """Начало импорта из Excel."""
     await state.set_state(ImportStates.waiting_file)
     await callback.answer()
     await callback.message.edit_text(
@@ -1834,7 +1823,7 @@ async def callback_import_excel(callback: CallbackQuery, state: FSMContext, db_u
 @router.message(ImportStates.waiting_file, F.document)
 @admin_only
 async def process_import_file(message: Message, state: FSMContext, db_user: User) -> None:
-    """Process uploaded Excel file."""
+    """Обработка загруженного Excel-файла."""
     doc = message.document
 
     if not doc.file_name or not doc.file_name.endswith((".xlsx", ".xls")):
@@ -1846,7 +1835,6 @@ async def process_import_file(message: Message, state: FSMContext, db_user: User
 
     await message.answer("⏳ Обрабатываю файл...")
 
-    # Download file
     tmp_dir = Path("tmp")
     tmp_dir.mkdir(exist_ok=True)
     file_path = tmp_dir / doc.file_name
@@ -1855,7 +1843,6 @@ async def process_import_file(message: Message, state: FSMContext, db_user: User
         file = await message.bot.get_file(doc.file_id)
         await message.bot.download_file(file.file_path, destination=file_path)
 
-        # Parse
         items, errors = parse_equipment_excel(file_path)
 
         if not items and errors:
@@ -1866,7 +1853,6 @@ async def process_import_file(message: Message, state: FSMContext, db_user: User
             await state.clear()
             return
 
-        # Import into DB
         created = 0
         skipped = 0
         async with async_session_maker() as session:
@@ -1886,7 +1872,6 @@ async def process_import_file(message: Message, state: FSMContext, db_user: User
                     errors.append(f"{item['name']}: {e}")
                     skipped += 1
 
-        # Build result message
         result_lines = [
             f"✅ <b>Импорт завершён</b>\n",
             f"📦 Добавлено: <b>{created}</b>",
@@ -1920,7 +1905,7 @@ async def process_import_file(message: Message, state: FSMContext, db_user: User
 @router.message(ImportStates.waiting_file)
 @admin_only
 async def process_import_not_file(message: Message, state: FSMContext, db_user: User) -> None:
-    """Handle non-file messages during import."""
+    """Обработка не-файловых сообщений при импорте."""
     await message.answer(
         "❌ Отправьте Excel-файл (.xlsx).\n\n"
         "Если хотите отменить — нажмите «Назад».",

@@ -1,4 +1,4 @@
-"""Main bot entry point."""
+"""Точка входа бота."""
 
 import asyncio
 import os
@@ -18,15 +18,14 @@ from scheduler import tasks
 from utils.logger import logger
 
 
-# Global scheduler instance
+# Глобальный инстанс планировщика
 scheduler = AsyncIOScheduler()
 
 
 async def on_startup(bot: Bot) -> None:
-    """Startup actions."""
+    """Действия при запуске."""
     logger.info("Bot starting...")
 
-    # Run alembic migrations before anything else
     try:
         result = subprocess.run(
             ["alembic", "upgrade", "head"],
@@ -39,10 +38,8 @@ async def on_startup(bot: Bot) -> None:
     except Exception as e:
         logger.error(f"Failed to run alembic migrations: {e}")
 
-    # Initialize database
     await init_db()
 
-    # Create default admin if specified in config
     if settings.default_admin_id:
         from database.db import async_session_maker
         from database import crud
@@ -57,7 +54,7 @@ async def on_startup(bot: Bot) -> None:
                 )
                 logger.info(f"Created default admin with ID {settings.default_admin_id}")
             else:
-                # Update to admin if not already
+                # Повышаем до администратора, если ещё нет прав
                 if not existing_user.is_admin:
                     from database.models import User
                     existing_user.is_admin = True
@@ -66,10 +63,8 @@ async def on_startup(bot: Bot) -> None:
                 else:
                     logger.info(f"Admin {settings.default_admin_id} already exists")
 
-    # Setup scheduler tasks
     logger.info("Setting up scheduler...")
 
-    # Task 1: Check booking confirmations (every 1 minute)
     scheduler.add_job(
         tasks.check_booking_confirmations,
         trigger='interval',
@@ -79,7 +74,6 @@ async def on_startup(bot: Bot) -> None:
         replace_existing=True
     )
 
-    # Task 2: Send confirmation reminders (every 1 minute)
     scheduler.add_job(
         tasks.send_confirmation_reminders,
         trigger='interval',
@@ -89,7 +83,6 @@ async def on_startup(bot: Bot) -> None:
         replace_existing=True
     )
 
-    # Task 3: Send end reminders (every 5 minutes)
     scheduler.add_job(
         tasks.send_end_reminders,
         trigger='interval',
@@ -99,7 +92,6 @@ async def on_startup(bot: Bot) -> None:
         replace_existing=True
     )
 
-    # Task 4: Check overdue returns (every 5 minutes)
     scheduler.add_job(
         tasks.check_overdue_returns,
         trigger='interval',
@@ -109,7 +101,6 @@ async def on_startup(bot: Bot) -> None:
         replace_existing=True
     )
 
-    # Task 5: Auto-complete stuck bookings (every 60 minutes)
     scheduler.add_job(
         tasks.auto_complete_old_bookings,
         trigger='interval',
@@ -119,7 +110,6 @@ async def on_startup(bot: Bot) -> None:
         replace_existing=True
     )
 
-    # Task 6: Scheduler heartbeat (every 30 minutes)
     scheduler.add_job(
         tasks.scheduler_heartbeat,
         trigger='interval',
@@ -129,7 +119,7 @@ async def on_startup(bot: Bot) -> None:
         replace_existing=True
     )
 
-    # Check heartbeat file for stale scheduler
+    # Проверяем heartbeat на устаревший планировщик
     heartbeat_file = tasks.HEARTBEAT_FILE
     if os.path.exists(heartbeat_file):
         try:
@@ -143,55 +133,45 @@ async def on_startup(bot: Bot) -> None:
         except Exception as e:
             logger.error(f"Error reading heartbeat file: {e}")
 
-    # Start scheduler
     scheduler.start()
     logger.info("Scheduler started with 6 tasks")
 
-    # Get bot info
     bot_info = await bot.get_me()
     logger.info(f"Bot started: @{bot_info.username}")
 
 
 async def on_shutdown(bot: Bot) -> None:
-    """Shutdown actions."""
+    """Действия при остановке."""
     logger.info("Bot shutting down...")
 
-    # Shutdown scheduler
     scheduler.shutdown(wait=True)
     logger.info("Scheduler stopped")
 
-    # Close database connections
     await close_db()
 
     logger.info("Bot stopped")
 
 
 async def main() -> None:
-    """Main function to run the bot."""
-    # Create bot instance
+    """Запуск бота."""
     bot = Bot(
         token=settings.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
 
-    # Create dispatcher
     dp = Dispatcher()
 
-    # Register startup/shutdown handlers
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
 
-    # Register middlewares
     dp.message.middleware(AuthMiddleware())
     dp.callback_query.middleware(AuthMiddleware())
 
-    # Register routers
     dp.include_router(start.router)
     dp.include_router(booking.router)
     dp.include_router(user.router)
     dp.include_router(admin.router)
 
-    # Start polling
     logger.info("Starting polling...")
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())

@@ -1,4 +1,4 @@
-"""Database engine and session factory."""
+"""Движок и фабрика сессий базы данных."""
 
 from collections.abc import AsyncGenerator
 
@@ -12,15 +12,15 @@ from config import settings
 from utils.logger import logger
 
 
-# Create async engine with connection pool
+# Движок с пулом соединений
 engine = create_async_engine(
     settings.database_url,
-    echo=False,  # Set True for SQL debugging
+    echo=False,  # True для отладки SQL запросов
     pool_size=20,
     max_overflow=10,
 )
 
-# Session factory
+# Фабрика сессий
 async_session_maker = async_sessionmaker(
     engine,
     class_=AsyncSession,
@@ -29,12 +29,7 @@ async_session_maker = async_sessionmaker(
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Get database session.
-
-    Yields:
-        AsyncSession: Database session
-    """
+    """Получить сессию базы данных."""
     async with async_session_maker() as session:
         try:
             yield session
@@ -47,11 +42,10 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    """Initialize database connection and create tables."""
+    """Инициализировать подключение и создать таблицы."""
     try:
         from database.models import Base
 
-        # Create all tables
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
@@ -63,6 +57,6 @@ async def init_db() -> None:
 
 
 async def close_db() -> None:
-    """Close database connections."""
+    """Закрыть соединения с базой данных."""
     await engine.dispose()
     logger.info("Database connections closed")
